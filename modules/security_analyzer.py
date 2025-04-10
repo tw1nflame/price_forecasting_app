@@ -180,7 +180,7 @@ class SecurityAnalyzer:
         # 4. Анализ сезонности
         if len(material_data) >= 12:  # Минимум год данных для анализа сезонности
             # Группировка по месяцам
-            monthly_data = material_data.set_index('ДатаСоздан').resample('M')['Цена нетто'].mean()
+            monthly_data = material_data.set_index('ДатаСоздан').resample('ME')['Цена нетто'].mean()
             
             if len(monthly_data) > 1:
                 # Вычисляем сезонную компоненту как отклонение от скользящего среднего
@@ -842,7 +842,7 @@ class SecurityAnalyzer:
             if len(material_data) > 1:
                 material_data_copy['days_diff'] = material_data_copy['ДатаСоздан'].diff().dt.days
                 
-                periods_data = material_data_copy[['ДатаСоздан', 'days_diff']].dropна()
+                periods_data = material_data_copy[['ДатаСоздан', 'days_diff']].dropna()
                 periods_data.columns = ['Дата', 'Интервал (дни)']
                 
                 periods_data.to_excel(writer, sheet_name='Периодичность', index=False)

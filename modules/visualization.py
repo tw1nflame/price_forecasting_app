@@ -35,7 +35,12 @@ class Visualizer:
             title='Топ-20 материалов по количеству записей'
         )
         fig.update_traces(texttemplate='%{text:,}', textposition='outside')
-        fig.update_layout(xaxis_tickangle=-45)
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            height=500,  # Устанавливаем фиксированную высоту
+            margin=dict(l=20, r=20, t=40, b=20),  # Уменьшаем отступы
+            autosize=True  # Разрешаем автоматическое изменение размера
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -56,7 +61,12 @@ class Visualizer:
                 title='Топ-10 групп по количеству уникальных материалов'
             )
             fig.update_traces(texttemplate='%{text:,}', textposition='outside')
-            fig.update_layout(xaxis_tickangle=-45)
+            fig.update_layout(
+                xaxis_tickangle=-45,
+                height=500,
+                margin=dict(l=20, r=20, t=40, b=20),
+                autosize=True
+            )
             
             st.plotly_chart(fig, use_container_width=True)
         
@@ -85,6 +95,11 @@ class Visualizer:
             title='Распределение материалов по количеству записей'
         )
         fig.update_traces(textinfo='percent+label')
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
     
@@ -103,6 +118,11 @@ class Visualizer:
             x='Дата',
             y='Количество записей',
             title='Количество записей по месяцам'
+        )
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -146,7 +166,10 @@ class Visualizer:
         fig.update_layout(
             title="Тепловая карта количества записей по годам и месяцам",
             xaxis_title="Месяц",
-            yaxis_title="Год"
+            yaxis_title="Год",
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -176,6 +199,11 @@ class Visualizer:
             tickvals=list(range(1, 13)),
             ticktext=[month_names[m] for m in range(1, 13)]
         )
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
     
@@ -196,7 +224,12 @@ class Visualizer:
             title='Топ-20 материалов с наибольшей волатильностью цен'
         )
         fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
-        fig.update_layout(xaxis_tickangle=-45)
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -211,7 +244,12 @@ class Visualizer:
             title='Топ-20 материалов с наименьшей ненулевой волатильностью цен'
         )
         fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
-        fig.update_layout(xaxis_tickangle=-45)
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -226,6 +264,11 @@ class Visualizer:
             x='Коэффициент вариации',
             nbins=50,
             title='Распределение коэффициентов вариации цен материалов'
+        )
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -254,6 +297,11 @@ class Visualizer:
             title='Распределение материалов по категориям волатильности'
         )
         fig.update_traces(textinfo='percent+label')
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
     
@@ -280,6 +328,11 @@ class Visualizer:
             title='Распределение материалов по стабильности цен'
         )
         fig.update_traces(textinfo='percent+label')
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -297,7 +350,12 @@ class Visualizer:
             title='Топ-20 материалов с наибольшим процентом одинаковых значений цены'
         )
         fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
-        fig.update_layout(xaxis_tickangle=-45)
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -337,7 +395,11 @@ class Visualizer:
             )
         )
         
-        fig.update_layout(height=600)
+        fig.update_layout(
+            height=600,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
     
@@ -369,6 +431,11 @@ class Visualizer:
             title='Распределение материалов по времени неактивности'
         )
         fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -391,6 +458,11 @@ class Visualizer:
             title='Распределение материалов по активности'
         )
         fig.update_traces(textinfo='percent+label')
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -407,7 +479,12 @@ class Visualizer:
             title='Топ-20 материалов с наибольшим периодом неактивности'
         )
         fig.update_traces(texttemplate='%{text:,}', textposition='outside')
-        fig.update_layout(xaxis_tickangle=-45)
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -423,6 +500,11 @@ class Visualizer:
             x='Дата',
             y='Количество материалов',
             title='Распределение материалов по дате последней активности'
+        )
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -447,6 +529,11 @@ class Visualizer:
             title='Распределение материалов по сегментам'
         )
         fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -458,6 +545,11 @@ class Visualizer:
             title='Распределение материалов по сегментам'
         )
         fig.update_traces(textinfo='percent+label')
+        fig.update_layout(
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            autosize=True
+        )
         
         st.plotly_chart(fig, use_container_width=True)
         
@@ -506,6 +598,11 @@ class Visualizer:
                     title='Среднее количество записей по сегментам'
                 )
                 fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+                fig.update_layout(
+                    height=500,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    autosize=True
+                )
                 
                 st.plotly_chart(fig, use_container_width=True)
             
@@ -522,6 +619,11 @@ class Visualizer:
                     title='Средний коэффициент вариации по сегментам'
                 )
                 fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                fig.update_layout(
+                    height=500,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    autosize=True
+                )
                 
                 st.plotly_chart(fig, use_container_width=True)
             
@@ -538,5 +640,10 @@ class Visualizer:
                     title='Средний временной диапазон материалов по сегментам'
                 )
                 fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+                fig.update_layout(
+                    height=500,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    autosize=True
+                )
                 
                 st.plotly_chart(fig, use_container_width=True)
