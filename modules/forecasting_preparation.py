@@ -820,7 +820,7 @@ class ForecastPreparation:
                 ]
                 
                 # Колонки, которые есть в segment_data
-                available_detail_columns = [col for col in detail_columns if col in segment_data.columns]
+                available_detail_columns = [col for col in detail_columns if col в segment_data.columns]
                 
                 if available_detail_columns:
                     # Вместо обработки каждой колонки отдельно, создаем промежуточный датафрейм
@@ -840,10 +840,10 @@ class ForecastPreparation:
     
     def _export_to_csv(self, data):
         """
-        Экспортирует данные в формате CSV
+        Экспортирует данные в формате CSV с правильной кодировкой
         """
-        csv_buffer = io.StringIO()
-        data.to_csv(csv_buffer, index=False)
+        csv_buffer = io.BytesIO()  # Используем BytesIO вместо StringIO для работы с бинарными данными
+        data.to_csv(csv_buffer, index=False, encoding='utf-8-sig')  # UTF-8 с BOM для Excel
         return csv_buffer.getvalue()
     
     def _export_to_excel(self, data, sheet_name="Данные"):
