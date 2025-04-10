@@ -537,3 +537,70 @@ def show_error_message(error, error_type="Ошибка", show_traceback=False):
     
     # Отображаем HTML
     st.markdown(error_html, unsafe_allow_html=True)
+
+def show_loading_spinner(message="Загрузка данных...", key=None):
+    """
+    Отображает анимированный индикатор загрузки с сообщением
+    
+    Args:
+        message: текст сообщения
+        key: уникальный ключ для виджета (если нужно несколько индикаторов)
+    
+    Returns:
+        placeholder: объект-заполнитель для сообщения
+    """
+    spinner_html = f"""
+    <div style="display: flex; align-items: center; margin: 10px 0;">
+        <div class="loading-spinner"></div>
+        <span style="margin-left: 10px; color: #424242;">{message}</span>
+    </div>
+    
+    <style>
+    .loading-spinner {{
+        border: 4px solid #f3f3f3;
+        border-radius: 50%;
+        border-top: 4px solid #1E88E5;
+        width: 24px;
+        height: 24px;
+        animation: spinner-rotation 1s linear infinite;
+    }}
+    
+    @keyframes spinner-rotation {{
+        0% {{ transform: rotate(0deg); }}
+        100% {{ transform: rotate(360deg); }}
+    }}
+    </style>
+    """
+    
+    placeholder = st.empty() if key is None else st.empty().key(key)
+    placeholder.markdown(spinner_html, unsafe_allow_html=True)
+    return placeholder
+
+def show_export_success(filename, filesize, duration):
+    """
+    Отображает сообщение об успешном экспорте данных
+    
+    Args:
+        filename: имя файла
+        filesize: размер файла в байтах
+        duration: продолжительность экспорта в секундах
+    """
+    # Преобразуем размер в читаемый формат
+    size_str = ""
+    if filesize < 1024:
+        size_str = f"{filesize} байт"
+    elif filesize < 1024 * 1024:
+        size_str = f"{filesize / 1024:.1f} КБ"
+    else:
+        size_str = f"{filesize / (1024 * 1024):.1f} МБ"
+    
+    success_html = f"""
+    <div style="background-color: #E8F5E9; padding: 15px; border-radius: 5px; margin: 10px 0;">
+        <h3 style="color: #2E7D32; margin-top: 0; margin-bottom: 10px;">Экспорт данных завершен</h3>
+        <p style="margin: 0 0 5px 0;"><strong>Файл:</strong> {filename}</p>
+        <p style="margin: 0 0 5px 0;"><strong>Размер:</strong> {size_str}</p>
+        <p style="margin: 0 0 5px 0;"><strong>Время выполнения:</strong> {duration:.2f} сек.</p>
+    </div>
+    """
+    
+    st.markdown(success_html, unsafe_allow_html=True)
