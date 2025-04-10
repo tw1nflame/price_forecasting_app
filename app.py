@@ -36,6 +36,36 @@ material_segmenter = MaterialSegmenter()
 forecast_preparation = ForecastPreparation()
 security_analyzer = SecurityAnalyzer()
 
+# Боковая панель
+with st.sidebar:
+    st.header("Навигация")
+    page = st.radio(
+        "Выберите раздел:",
+        ["Информация", "Загрузка данных", "Общий анализ", "Анализ уникальности материалов", 
+         "Временной анализ", "Анализ волатильности", "Стабильные материалы", 
+         "Неактивные материалы", "Сегментация для прогнозирования", "Анализ безопасности", "Экспорт данных"]
+    )
+    
+    st.divider()
+    st.header("Статус")
+    
+    # Проверка наличия данных в сессии
+    if 'data' in st.session_state:
+        st.success(f"Данные загружены: {st.session_state.data.shape[0]} строк")
+        if 'processed_data' in st.session_state:
+            st.success("Данные обработаны")
+        if 'materials_segments' in st.session_state:
+            st.success("Материалы сегментированы")
+            
+            # Отображение статистики по сегментам
+            segments_stats = st.session_state.get('segments_stats', {})
+            if segments_stats:
+                st.write("Распределение материалов:")
+                for segment, count in segments_stats.items():
+                    st.write(f"- {segment}: {count}")
+    else:
+        st.warning("Данные не загружены")
+
 # Заголовок приложения
 st.title("Анализ и прогнозирование цен материалов")
 
@@ -93,36 +123,6 @@ def display_info():
         
         **Примечание:** Особое внимание следует уделить материалам из сегмента "Высокая волатильность", так как в этом сегменте наиболее часто обнаруживаются признаки потенциальных нарушений.
         """)
-# Боковая панель
-with st.sidebar:
-    st.header("Навигация")
-    page = st.radio(
-        "Выберите раздел:",
-        ["Информация", "Загрузка данных", "Общий анализ", "Анализ уникальности материалов", 
-         "Временной анализ", "Анализ волатильности", "Стабильные материалы", 
-         "Неактивные материалы", "Сегментация для прогнозирования", "Анализ безопасности", "Экспорт данных"]
-    )
-    
-    st.divider()
-    st.header("Статус")
-    
-    # Проверка наличия данных в сессии
-    if 'data' in st.session_state:
-        st.success(f"Данные загружены: {st.session_state.data.shape[0]} строк")
-        if 'processed_data' in st.session_state:
-            st.success("Данные обработаны")
-        if 'materials_segments' in st.session_state:
-            st.success("Материалы сегментированы")
-            
-            # Отображение статистики по сегментам
-            segments_stats = st.session_state.get('segments_stats', {})
-            if segments_stats:
-                st.write("Распределение материалов:")
-                for segment, count in segments_stats.items():
-                    st.write(f"- {segment}: {count}")
-    else:
-        st.warning("Данные не загружены")
-
 # Основное содержимое
 if page == "Информация":
     display_info()

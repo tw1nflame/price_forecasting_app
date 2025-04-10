@@ -1,3 +1,4 @@
+# filepath: c:\price_forecasting_app\modules\data_analyzer.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -135,16 +136,26 @@ class DataAnalyzer:
         material_counts.columns = ["Материал", "Количество записей"]
         material_counts = material_counts.sort_values("Количество записей", ascending=False)
         
-        # Добавляем поиск по материалам
+        # Поиск материала по коду
         search_material = st.text_input("Поиск материала по коду:")
         
         if search_material:
             filtered_materials = material_counts[material_counts["Материал"].str.contains(search_material)]
-            st.dataframe(filtered_materials, use_container_width=True)
+            from modules.utils import format_streamlit_dataframe
+            st.dataframe(
+                format_streamlit_dataframe(filtered_materials),
+                use_container_width=True,
+                height=500  # Фиксированная высота для лучшего отображения
+            )
         else:
             # Показываем топ материалов
             st.write("Топ-20 материалов по количеству записей:")
-            st.dataframe(material_counts.head(20), use_container_width=True)
+            from modules.utils import format_streamlit_dataframe
+            st.dataframe(
+                format_streamlit_dataframe(material_counts.head(20)),
+                use_container_width=True,
+                height=500  # Фиксированная высота для лучшего отображения
+            )
         
         # Гистограмма распределения количества записей
         st.subheader("Гистограмма распределения количества записей")
@@ -348,7 +359,12 @@ class DataAnalyzer:
                 "Значение (дни)": interval_stats.values
             })
             
-            st.dataframe(stats_df, use_container_width=True)
+            from modules.utils import format_streamlit_dataframe
+            st.dataframe(
+                format_streamlit_dataframe(stats_df),
+                use_container_width=True,
+                height=300  # Фиксированная высота для лучшего отображения
+            )
             
             # Гистограмма интервалов
             fig = px.histogram(
@@ -361,3 +377,69 @@ class DataAnalyzer:
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Недостаточно данных для анализа временных интервалов")
+    
+    def display_basic_stats(self, data):
+        """
+        Отображает базовую статистику по данным
+        """
+        st.header("Базовая статистика")
+        
+        # Получаем базовую статистику по числовым столбцам
+        stats_df = data.describe().T
+        
+        # Добавляем типы данных
+        stats_df['Тип данных'] = data.dtypes
+        
+        # Добавляем количество уникальных значений
+        stats_df['Уникальных значений'] = data.nunique()
+        
+        # Добавляем процент заполненности
+        stats_df['Заполненность, %'] = (data.count() / len(data) * 100).round(2)
+        
+        # Сортируем по заполненности
+        stats_df = stats_df.sort_values('Заполненность, %', ascending=False)
+        
+        # Добавляем все полезные статистики, которые могут помочь в анализе
+        stats_df = stats_df.rename(columns={
+            'count': 'Количество',
+            'mean': 'Среднее',
+            'std': 'Стандартное отклонение',
+            'min': 'Минимум',
+            '25%': '25-й перцентиль',
+            '50%': 'Медиана',
+            '75%': '75-й перцентиль',
+            'max': 'Максимум'
+        })
+        
+        # Отображаем базовую статистику
+        from modules.utils import format_streamlit_dataframe
+        st.dataframe(
+            format_streamlit_dataframe(stats_df),
+            use_container_width=True,
+            height=500  # Фиксированная высота для лучшего отображения
+        )
+        
+        return stats_df
+
+    def display_missing_values(self, data):
+        """
+        Отображает информацию о пропущенных значениях
+        """
+        st.header("Анализ пропущенных значений")
+        
+        # Вычисляем суммарную статистику по пропущенным значениям
+        missing = pd.DataFrame({
+            'Количество пропусков': data.isna().sum(),
+            'Процент пропусков': (data.isna().sum() / len(data) * 100).round(2)
+        })
+        
+        # Сортируем по проценту пропусков (по убыванию)
+        missing = missing.sort_values('Процент пропусков', ascending=False)
+        
+        # Отображаем таблицу с пропущенными значениями
+        from modules.utils import format_streamlit_dataframe
+        st.dataframe(
+            format_streamlit_dataframe(missing),
+            use_container_width=True,
+            height=400  # Фиксированная высота для лучшего отображения
+        )

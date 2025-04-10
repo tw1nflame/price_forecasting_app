@@ -10,7 +10,7 @@ def apply_custom_css():
     """
     Применяет пользовательские CSS-стили к приложению
     """
-    # Загружаем CSS из файла или задаем встроенные стили
+    # Основные стили
     css = """
     /* Основные стили */
     .stApp {
@@ -36,19 +36,6 @@ def apply_custom_css():
     [data-testid="stMetricValue"] {
         font-size: 2rem !important;
         font-weight: bold;
-    }
-    
-    /* Боковая панель */
-    [data-testid="stSidebar"] {
-        background-color: #f5f5f5;
-        padding: 1rem;
-    }
-    
-    [data-testid="stSidebar"] h2 {
-        color: #1E88E5;
-        border-bottom: 1px solid #e0e0e0;
-        padding-bottom: 10px;
-        margin-bottom: 20px;
     }
     
     /* Информационные блоки */
@@ -103,6 +90,61 @@ def apply_custom_css():
     .tooltip:hover .tooltiptext {
         visibility: visible;
         opacity: 1;
+    }
+    
+    /* Полный сброс стилей боковой панели для предотвращения конфликтов */
+    [data-testid="stSidebar"] {
+        background-color: #f5f5f5;
+        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 250px !important;
+        min-width: 250px !important;
+        max-width: 250px !important;
+    }
+    
+    /* Контент внутри боковой панели */
+    [data-testid="stSidebar"] > div {
+        padding: 1rem !important;
+        margin: 0 !important;
+    }
+    
+    /* Настройка радио-кнопок в боковой панели */
+    .stRadio > div {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+    
+    /* Сброс отступов стрелки сворачивания боковой панели */
+    button[kind="headerButton"] {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* Заголовки в боковой панели */
+    [data-testid="stSidebar"] h2, 
+    [data-testid="stSidebar"] h3, 
+    [data-testid="stSidebar"] .stRadio label {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+    
+    /* Агрессивный сброс стилей для всех элементов боковой панели */
+    [data-testid="stSidebar"] * {
+        box-sizing: border-box;
+    }
+    
+    /* Принудительное применение стилей к родительским элементам сайдбара */
+    section[data-testid="stSidebar"] {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+        width: 250px !important;
+    }
+    
+    /* Решение проблемы с отступом главного контейнера сайдбара */
+    .css-1d391kg, .css-1wrcr25 {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
     }
     """
     
@@ -311,3 +353,52 @@ def detect_outliers(series, method='iqr', threshold=1.5):
     else:
         # Если метод не распознан, возвращаем все False
         return pd.Series(False, index=series.index)
+
+def format_streamlit_dataframe(df, height=None):
+    """
+    Форматирует DataFrame для отображения в Streamlit
+    
+    Args:
+        df: pandas DataFrame
+        height: высота таблицы в пикселях (None - автоматически)
+        
+    Returns:
+        стилизованный DataFrame
+    """
+    # Применяем базовый стиль к таблице
+    styled_df = df.style.set_table_styles([
+        {'selector': 'th', 'props': [('background-color', '#E3F2FD'), 
+                                     ('color', '#000000'), 
+                                     ('font-weight', 'bold'),
+                                     ('border', '1px solid #B0BEC5')]},
+        {'selector': 'td', 'props': [('border', '1px solid #E0E0E0')]},
+        {'selector': 'tr:hover', 'props': [('background-color', '#F5F5F5')]},
+        {'selector': 'tr:nth-child(even)', 'props': [('background-color', '#FAFAFA')]}
+    ])
+    
+    # Форматируем числовые столбцы
+    numeric_cols = df.select_dtypes(include=['float', 'int']).columns
+    for col in numeric_cols:
+        if 'процент' in col.lower() or 'доля' in col.lower() or '%' in col:
+            # Форматируем как процент с двумя десятичными знаками
+            styled_df = styled_df.format({col: lambda x: f"{x:.2f}%"})
+        elif 'цена' in col.lower() or 'стоимость' in col.lower() or 'руб' in col.lower():
+            # Используем функцию format_number для форматирования чисел с разделителями тысяч
+            styled_df = styled_df.format({col: lambda x: format_number(x, precision=2)})
+        elif df[col].dtype == 'int64':
+            # Целые числа форматируем с разделителями тысяч
+            styled_df = styled_df.format({col: lambda x: format_number(x, precision=0)})
+        else:
+            # Прочие числа форматируем с двумя десятичными знаками
+            styled_df = styled_df.format({col: lambda x: format_number(x, precision=2)})
+    
+    # Опционально можно выделить цветом ячейки на основе значений
+    # Например, выделить отрицательные значения красным
+    def highlight_negative(val):
+        if isinstance(val, (int, float)) and val < 0:
+            return 'color: red'
+        return ''
+    
+    styled_df = styled_df.applymap(highlight_negative)
+    
+    return styled_df

@@ -61,16 +61,27 @@ class MaterialSegmenter:
         
         if search_material:
             filtered_materials = volatility_data[volatility_data['Материал'].str.contains(search_material)]
-            st.dataframe(filtered_materials, use_container_width=True)
+            from modules.utils import format_streamlit_dataframe
+            st.dataframe(
+                format_streamlit_dataframe(filtered_materials),
+                use_container_width=True,
+                height=500  # Фиксированная высота для лучшего отображения
+            )
         else:
             # Показываем топ по волатильности
             st.write("Топ-20 материалов с наибольшей волатильностью:")
-            st.dataframe(volatility_data.head(20), use_container_width=True)
+            from modules.utils import format_streamlit_dataframe
+            st.dataframe(
+                format_streamlit_dataframe(volatility_data.head(20)),
+                use_container_width=True,
+                height=500  # Фиксированная высота для лучшего отображения
+            )
             
             st.write("Топ-20 материалов с наименьшей ненулевой волатильностью:")
             st.dataframe(
-                volatility_data[volatility_data['Коэффициент вариации'] > 0].tail(20), 
-                use_container_width=True
+                format_streamlit_dataframe(volatility_data[volatility_data['Коэффициент вариации'] > 0].tail(20)),
+                use_container_width=True,
+                height=500  # Фиксированная высота для лучшего отображения
             )
     
     def analyze_stability(self, data):
@@ -117,11 +128,21 @@ class MaterialSegmenter:
         
         if search_material:
             filtered_materials = stability_data[stability_data['Материал'].str.contains(search_material)]
-            st.dataframe(filtered_materials, use_container_width=True)
+            from modules.utils import format_streamlit_dataframe
+            st.dataframe(
+                format_streamlit_dataframe(filtered_materials),
+                use_container_width=True,
+                height=500  # Фиксированная высота для лучшего отображения
+            )
         else:
             # Показываем материалы с наибольшим процентом одинаковых значений
             st.write("Топ-20 материалов с наибольшим процентом одинаковых значений:")
-            st.dataframe(stability_data.head(20), use_container_width=True)
+            from modules.utils import format_streamlit_dataframe
+            st.dataframe(
+                format_streamlit_dataframe(stability_data.head(20)),
+                use_container_width=True,
+                height=500  # Фиксированная высота для лучшего отображения
+            )
     
     def analyze_inactivity(self, data):
         """
@@ -192,13 +213,20 @@ class MaterialSegmenter:
         
         if search_material:
             filtered_materials = inactivity_data[inactivity_data['Материал'].str.contains(search_material)]
-            st.dataframe(filtered_materials, use_container_width=True)
+            from modules.utils import format_streamlit_dataframe
+            st.dataframe(
+                format_streamlit_dataframe(filtered_materials),
+                use_container_width=True,
+                height=500  # Фиксированная высота для лучшего отображения
+            )
         else:
             # Показываем материалы с наибольшим периодом неактивности
             st.write("Топ-20 материалов с наибольшим периодом неактивности:")
+            from modules.utils import format_streamlit_dataframe
             st.dataframe(
-                inactivity_data.sort_values('Дней с последней активности', ascending=False).head(20), 
-                use_container_width=True
+                format_streamlit_dataframe(inactivity_data.sort_values('Дней с последней активности', ascending=False).head(20)),
+                use_container_width=True,
+                height=500  # Фиксированная высота для лучшего отображения
             )
     
     def _calculate_volatility(self, data):

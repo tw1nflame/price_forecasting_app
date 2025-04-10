@@ -61,7 +61,12 @@ class DataLoader:
                     preview_data = self._read_preview(preview_buffer, encoding, delimiter, skip_rows)
                     
                     st.subheader("Предварительный просмотр")
-                    st.dataframe(preview_data)
+                    from modules.utils import format_streamlit_dataframe
+                    st.dataframe(
+                        format_streamlit_dataframe(preview_data),
+                        use_container_width=True,
+                        height=400  # Фиксированная высота для лучшего отображения
+                    )
                     
                     if st.button("Загрузить данные"):
                         with st.spinner("Загрузка данных..."):
@@ -91,7 +96,12 @@ class DataLoader:
                             
                             # Показываем пример данных
                             st.subheader("Пример данных")
-                            st.dataframe(data.head())
+                            from modules.utils import format_streamlit_dataframe
+                            st.dataframe(
+                                format_streamlit_dataframe(data.head()),
+                                use_container_width=True,
+                                height=400  # Фиксированная высота для лучшего отображения
+                            )
                     
                 except Exception as e:
                     st.error(f"Ошибка при чтении файла: {str(e)}")

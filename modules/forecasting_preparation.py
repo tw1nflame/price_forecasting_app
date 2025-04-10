@@ -708,8 +708,12 @@ class ForecastPreparation:
                         segment_counts = all_filtered_data.groupby('Сегмент')['Материал'].nunique().reset_index()
                         segment_counts.columns = ['Сегмент', 'Количество материалов']
                         
-                        st.write("Распределение отфильтрованных материалов по сегментам:")
-                        st.dataframe(segment_counts)
+                        from modules.utils import format_streamlit_dataframe
+                        st.dataframe(
+                            format_streamlit_dataframe(segment_counts),
+                            use_container_width=True,
+                            height=400  # Фиксированная высота для лучшего отображения
+                        )
                 else:
                     progress_bar.progress(1.0)
                     status_text.text("Нет данных для экспорта!")

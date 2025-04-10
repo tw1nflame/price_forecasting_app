@@ -25,7 +25,7 @@ class SecurityAnalyzer:
     
     def analyze_security_risks(self, data, segments):
         """
-        Проводит комплексный анализ безопасности данных
+        Проводит комплексный анализ безопасности данных - оптимизированная версия
         
         Args:
             data: pandas DataFrame с обработанными данными
@@ -48,20 +48,44 @@ class SecurityAnalyzer:
         status_text.text("Начинаем анализ безопасности...")
         
         try:
-            # 1. Создаем базовый набор данных для анализа
-            status_text.text("Подготовка данных для анализа...")
-            
-            # Получаем уникальные материалы
+            # 1. Вместо получения всех уникальных материалов сразу, будем работать с чанками
             unique_materials = data['Материал'].unique()
-            
-            # Создаем DataFrame для хранения оценок рисков
-            risk_data = []
-            
-            # 2. Анализируем каждый материал
             total_materials = len(unique_materials)
             
-            # Обрабатываем материалы небольшими партиями
-            batch_size = 100
+            # Для очень больших объемов данных выводим предупреждение и предлагаем ограничить анализ
+            if total_materials > 10000:
+                limit_analysis = st.checkbox(
+                    f"Обнаружено очень много материалов ({total_materials}). Ограничить анализ до 5000 случайных материалов?",
+                    value=True
+                )
+                if limit_analysis:
+                    # Берем случайную выборку из 5000 материалов
+                    np.random.seed(42)  # Для воспроизводимости
+                    unique_materials = np.random.choice(unique_materials, size=5000, replace=False)
+                    total_materials = 5000
+                    st.info(f"Анализ ограничен до {total_materials} случайных материалов")
+            
+            # 2. Создаем DataFrame для хранения оценок рисков - более эффективно работать с списком словарей
+            risk_data = []
+            
+            # 3. Обрабатываем материалы чанками для оптимизации памяти
+            batch_size = min(500, max(100, total_materials // 20))  # Адаптивный размер чанка
+            
+            # Создаем словарь для быстрого поиска сегмента
+            material_to_segment = {}
+            for segment_name, segment_data in segments.items():
+                for material in segment_data['Материал'].values:
+                    material_to_segment[material] = segment_name
+            
+            # Включим мониторинг памяти, если доступно
+            try:
+                import psutil
+                process = psutil.Process()
+                initial_memory = process.memory_info().rss / 1024 / 1024  # MB
+            except ImportError:
+                process = None
+            
+            # Обработка по чанкам
             for i in range(0, total_materials, batch_size):
                 batch_end = min(i + batch_size, total_materials)
                 batch_materials = unique_materials[i:batch_end]
@@ -71,9 +95,12 @@ class SecurityAnalyzer:
                 progress_bar.progress(progress_value)
                 status_text.text(f"Анализ материалов... {i}/{total_materials}")
                 
-                # Для каждого материала в партии
+                # Оптимизация: фильтруем данные один раз для всего батча, а не для каждого материала
+                batch_data = data[data['Материал'].isin(batch_materials)]
+                
+                # Для каждого материала в батче
                 for material in batch_materials:
-                    material_data = data[data['Материал'] == material].sort_values('ДатаСоздан')
+                    material_data = batch_data[batch_data['Материал'] == material].sort_values('ДатаСоздан')
                     
                     if len(material_data) < 2:
                         continue
@@ -84,12 +111,8 @@ class SecurityAnalyzer:
                     # Определяем категорию риска
                     risk_category, risk_factors = self._determine_risk_category(risk_metrics)
                     
-                    # Определяем сегмент материала
-                    material_segment = "Не определен"
-                    for segment_name, segment_data in segments.items():
-                        if material in segment_data['Материал'].values:
-                            material_segment = segment_name
-                            break
+                    # Определяем сегмент материала - используем предварительно созданный словарь
+                    material_segment = material_to_segment.get(material, "Не определен")
                     
                     # Сохраняем данные о рисках
                     risk_data.append({
@@ -104,11 +127,18 @@ class SecurityAnalyzer:
                         'Индекс сезонных отклонений': risk_metrics['seasonal_deviation'],
                         'Индекс подозрительности': risk_metrics['suspicion_index']
                     })
+                
+                # Если доступен мониторинг памяти, выводим информацию
+                if process:
+                    current_memory = process.memory_info().rss / 1024 / 1024
+                    memory_diff = current_memory - initial_memory
+                    if memory_diff > 500:  # Если использовано более 500 МБ дополнительной памяти
+                        st.warning(f"Высокое потребление памяти: {memory_diff:.1f} МБ. Если анализ слишком медленный, попробуйте ограничить выборку.")
             
             # Создаем DataFrame из собранных данных
             risk_df = pd.DataFrame(risk_data)
             
-            # Сортируем по индексу подозрительности
+            # Оптимизация: сортируем только после создания всего DataFrame
             if not risk_df.empty:
                 risk_df = risk_df.sort_values('Индекс подозрительности', ascending=False)
             
@@ -133,95 +163,121 @@ class SecurityAnalyzer:
     
     def _calculate_risk_metrics(self, material_data):
         """
-        Вычисляет метрики риска для материала
+        Вычисляет метрики риска для материала - оптимизированная версия
         
         Args:
             material_data: DataFrame с данными по одному материалу
-            
+                
         Returns:
             dict: словарь с метриками риска
         """
         metrics = {}
         
-        # 1. Волатильность цены
+        # Оптимизация: избегаем повторных вычислений, сохраняем результаты промежуточных операций
+        
+        # 1. Вычисляем базовые статистики цены за один проход
         prices = material_data['Цена нетто']
-        mean_price = prices.mean()
-        std_price = prices.std()
+        price_stats = {
+            'mean': prices.mean(),
+            'std': prices.std(),
+            'min': prices.min(),
+            'max': prices.max()
+        }
+        
+        # 2. Волатильность цены
+        mean_price = price_stats['mean']
+        std_price = price_stats['std']
         
         if mean_price > 0:
             metrics['volatility'] = (std_price / mean_price) * 100
         else:
             metrics['volatility'] = 0
         
-        # 2. Индекс аномальности цены (отношение макс/мин)
-        min_price = prices.min()
-        max_price = prices.max()
+        # 3. Индекс аномальности цены (отношение макс/мин)
+        min_price = price_stats['min']
+        max_price = price_stats['max']
         
         if min_price > 0:
             metrics['price_anomaly_index'] = (max_price / min_price)
         else:
             metrics['price_anomaly_index'] = 1
         
-        # 3. Анализ дробления закупок
-        dates = material_data['ДатаСоздан'].sort_values()
-        date_diffs = dates.diff().dt.days.dropna()
+        # 4. Анализ дробления закупок - оптимизированная версия
+        # Сортируем даты один раз и сохраняем результат
+        dates = material_data['ДатаСоздан'].sort_values().values
         
-        if len(date_diffs) > 0:
+        if len(dates) > 1:
+            # Используем numpy для векторизованных вычислений разницы дат
+            # Это гораздо быстрее, чем операции pandas
+            date_diffs = np.diff(dates) / np.timedelta64(1, 'D')  # разница в днях
+            
             # Среднее количество дней между закупками
-            metrics['avg_days_between_purchases'] = date_diffs.mean()
+            metrics['avg_days_between_purchases'] = np.mean(date_diffs) if len(date_diffs) > 0 else 0
             
             # Количество закупок с маленьким интервалом (менее 3 дней)
-            small_intervals = (date_diffs <= self.risk_thresholds['purchase_frequency']).sum()
-            metrics['purchase_fragmentation'] = small_intervals / len(date_diffs) * 100
+            small_intervals = np.sum(date_diffs <= self.risk_thresholds['purchase_frequency'])
+            metrics['purchase_fragmentation'] = small_intervals / len(date_diffs) * 100 if len(date_diffs) > 0 else 0
         else:
             metrics['avg_days_between_purchases'] = 0
             metrics['purchase_fragmentation'] = 0
         
-        # 4. Анализ сезонности
+        # 5. Анализ сезонности - упрощенная версия для больших данных
         if len(material_data) >= 12:  # Минимум год данных для анализа сезонности
-            # Группировка по месяцам
-            monthly_data = material_data.set_index('ДатаСоздан').resample('ME')['Цена нетто'].mean()
+            # Вместо ресемплинга, который может быть медленным,
+            # просто вычисляем стандартное отклонение средних цен по месяцам
+            material_data['month'] = material_data['ДатаСоздан'].dt.month
+            monthly_means = material_data.groupby('month')['Цена нетто'].mean()
             
-            if len(monthly_data) > 1:
-                # Вычисляем сезонную компоненту как отклонение от скользящего среднего
-                rolling_mean = monthly_data.rolling(window=3, center=True).mean()
-                seasonal = monthly_data - rolling_mean
-                
-                # Индекс сезонных отклонений (стандартное отклонение сезонной компоненты)
-                metrics['seasonal_deviation'] = seasonal.std() / monthly_data.mean() * 100 if monthly_data.mean() > 0 else 0
+            if len(monthly_means) > 1:
+                seasonal_deviation = monthly_means.std() / monthly_means.mean() * 100 if monthly_means.mean() > 0 else 0
+                metrics['seasonal_deviation'] = seasonal_deviation
             else:
                 metrics['seasonal_deviation'] = 0
         else:
             metrics['seasonal_deviation'] = 0
         
-        # 5. Анализ активности в конце периодов (квартала, года)
-        end_of_quarter_months = [3, 6, 9, 12]  # Март, Июнь, Сентябрь, Декабрь
-        material_data['Месяц'] = material_data['ДатаСоздан'].dt.month
-        material_data['День'] = material_data['ДатаСоздан'].dt.day
+        # 6. Анализ активности в конце периодов (квартала, года)
+        material_data_copy = material_data.copy()
+        material_data_copy['Месяц'] = material_data_copy['ДатаСоздан'].dt.month
+        material_data_copy['День'] = material_data_copy['ДатаСоздан'].dt.day
         
         # Закупки в конце месяца (последние 3 дня)
-        material_data['Конец месяца'] = material_data['День'] >= 28
-        end_of_month_activity = material_data['Конец месяца'].mean() * 100
+        end_of_month = (material_data_copy['День'] >= 28).mean() * 100
         
         # Закупки в конце квартала
-        material_data['Конец квартала'] = (material_data['Месяц'].isin(end_of_quarter_months)) & (material_data['День'] >= 28)
-        end_of_quarter_activity = material_data['Конец квартала'].mean() * 100
+        end_of_quarter_months = [3, 6, 9, 12]  # Март, Июнь, Сентябрь, Декабрь
+        end_of_quarter = ((material_data_copy['Месяц'].isin(end_of_quarter_months)) & 
+                         (material_data_copy['День'] >= 28)).mean() * 100
         
-        metrics['end_of_month_activity'] = end_of_month_activity
-        metrics['end_of_quarter_activity'] = end_of_quarter_activity
+        metrics['end_of_month_activity'] = end_of_month
+        metrics['end_of_quarter_activity'] = end_of_quarter
         
-        # 6. Проверка на округленные цены
+        # 7. Проверка на округленные цены - оптимизированная версия
+        # Используем векторизованные операции вместо цикла
+        unique_prices = np.unique(prices.values)
         rounded_prices = 0
-        for price in prices.unique():
-            # Проверяем, округлено ли число до 100, 1000, 10000 и т.д.
+        
+        # Для небольшого количества уникальных цен можно использовать цикл
+        if len(unique_prices) < 100:
+            for price in unique_prices:
+                # Проверяем, округлено ли число до 10, 100, 1000, 10000 и т.д.
+                for magnitude in [10, 100, 1000, 10000, 100000]:
+                    if price > 0 and abs(price % magnitude) / price < self.risk_thresholds['round_price_tolerance']:
+                        rounded_prices += 1
+                        break
+        else:
+            # Для большого количества цен используем более эффективный подход
             for magnitude in [10, 100, 1000, 10000, 100000]:
-                if abs(price % magnitude) / price < self.risk_thresholds['round_price_tolerance']:
-                    rounded_prices += 1
+                rounded_mask = (unique_prices > 0) & (np.abs(unique_prices % magnitude) / unique_prices < self.risk_thresholds['round_price_tolerance'])
+                rounded_prices += np.sum(rounded_mask)
+                # Исключаем уже учтенные цены
+                unique_prices = unique_prices[~rounded_mask]
+                if len(unique_prices) == 0:
                     break
         
         metrics['rounded_prices_ratio'] = rounded_prices / len(prices.unique()) * 100 if len(prices.unique()) > 0 else 0
         
-        # 7. Вычисляем общий индекс подозрительности
+        # 8. Вычисляем общий индекс подозрительности
         suspicion_index = (
             min(metrics['volatility'] * 0.5, 50) +                 # Волатильность (до 50 пунктов)
             min((metrics['price_anomaly_index'] - 1) * 10, 30) +    # Аномальность цены (до 30 пунктов)
@@ -395,7 +451,12 @@ class SecurityAnalyzer:
             filtered_risk_df = filtered_risk_df[filtered_risk_df['Сегмент'] == segment_filter]
         
         # Отображаем отфильтрованные данные
-        st.dataframe(filtered_risk_df, use_container_width=True)
+        from modules.utils import format_streamlit_dataframe
+        st.dataframe(
+            format_streamlit_dataframe(filtered_risk_df),
+            use_container_width=True,
+            height=500  # Фиксированная высота для лучшего отображения
+        )
         
         # 5. Экспорт данных
         if not filtered_risk_df.empty:
@@ -707,7 +768,12 @@ class SecurityAnalyzer:
         if rounded_prices:
             st.subheader("Обнаруженные округленные цены")
             st.write(f"**Процент округленных цен:** {len(rounded_prices) / len(unique_prices) * 100:.1f}%")
-            st.dataframe(pd.DataFrame(rounded_prices))
+            from modules.utils import format_streamlit_dataframe
+            st.dataframe(
+                format_streamlit_dataframe(pd.DataFrame(rounded_prices)),
+                use_container_width=True,
+                height=300  # Фиксированная высота для лучшего отображения
+            )
             
         # Добавляем кнопку для экспорта детального анализа в Excel
         excel_data = self.export_detailed_analysis(data, material_code)
@@ -842,7 +908,7 @@ class SecurityAnalyzer:
             if len(material_data) > 1:
                 material_data_copy['days_diff'] = material_data_copy['ДатаСоздан'].diff().dt.days
                 
-                periods_data = material_data_copy[['ДатаСоздан', 'days_diff']].dropna()
+                periods_data = material_data_copy[['ДатаСоздан', 'days_diff']].dropна()
                 periods_data.columns = ['Дата', 'Интервал (дни)']
                 
                 periods_data.to_excel(writer, sheet_name='Периодичность', index=False)
