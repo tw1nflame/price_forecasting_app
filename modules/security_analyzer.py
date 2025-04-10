@@ -467,11 +467,16 @@ class SecurityAnalyzer:
             filtered_risk_df = filtered_risk_df[filtered_risk_df['Сегмент'] == segment_filter]
         
         # Отображаем отфильтрованные данные
-        from modules.utils import format_streamlit_dataframe
+        from modules.utils import create_styled_dataframe
         st.dataframe(
-            format_streamlit_dataframe(filtered_risk_df),
+            create_styled_dataframe(
+                filtered_risk_df,
+                highlight_cols=['Индекс подозрительности'],
+                highlight_threshold=70,
+                precision=2
+            ),
             use_container_width=True,
-            height=500  # Фиксированная высота для лучшего отображения
+            height=500
         )
         
         # 5. Экспорт данных

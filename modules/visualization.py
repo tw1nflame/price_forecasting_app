@@ -4,6 +4,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from modules.utils import create_styled_dataframe
 
 class Visualizer:
     """
@@ -578,7 +579,13 @@ class Visualizer:
         
         # Показываем таблицу с данными выбранного сегмента
         st.write(f"Данные сегмента: {segment_selection}")
-        st.dataframe(display_data, use_container_width=True)
+        st.dataframe(
+            create_styled_dataframe(
+                display_data,
+                precision=2
+            ),
+            use_container_width=True
+        )
         
         # Визуализация характеристик сегментов
         if not all_segments.empty:

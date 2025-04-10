@@ -461,7 +461,7 @@ def format_streamlit_dataframe(df, height=None):
     # Опционально можно выделить цветом ячейки на основе значений
     # Например, выделить отрицательные значения красным
     def highlight_negative(val):
-        if isinstance(val, (int, float)) and val < 0:
+        if isinstance(val, (int, float)) и val < 0:
             return 'color: red'
         return ''
     
@@ -604,3 +604,106 @@ def show_export_success(filename, filesize, duration):
     """
     
     st.markdown(success_html, unsafe_allow_html=True)
+
+def create_styled_dataframe(df, height=None, precision=2, highlight_cols=None, highlight_threshold=None):
+    """
+    Создает стилизованный DataFrame для отображения в Streamlit
+    
+    Args:
+        df: pandas DataFrame для отображения
+        height: высота таблицы в пикселях (None - автоматически)
+        precision: точность для числовых значений
+        highlight_cols: список колонок для подсветки значений
+        highlight_threshold: пороговое значение для подсветки
+        
+    Returns:
+        styled_df: стилизованный DataFrame с форматированием
+    """
+    # Создаем копию DataFrame для форматирования
+    formatted_df = df.copy()
+    
+    # Функция для форматирования числовых значений
+    def format_value(x, precision=precision):
+        if pd.isna(x):
+            return ""
+        elif isinstance(x, (int, np.integer)):
+            return f"{x:,}".replace(",", " ")
+        elif isinstance(x, (float, np.floating)):
+            if x == int(x):  # Если число без десятичной части
+                return f"{int(x):,}".replace(",", " ")
+            else:
+                return f"{x:,.{precision}f}".replace(",", " ")
+        else:
+            return str(x)
+    
+    # Применяем форматирование к числовым колонкам
+    for col in formatted_df.select_dtypes(include=np.number).columns:
+        formatted_df[col] = formatted_df[col].apply(format_value)
+    
+    # Создаем объект стиля
+    styled_df = formatted_df.style
+    
+    # Добавляем базовое форматирование таблицы
+    styled_df = styled_df.set_table_styles([
+        {'selector': 'th', 'props': [
+            ('background-color', '#E3F2FD'), 
+            ('color', '#0D47A1'), 
+            ('font-weight', 'bold'),
+            ('border', '1px solid #B0BEC5'),
+            ('padding', '8px'),
+            ('text-align', 'left'),
+            ('white-space', 'nowrap'),
+            ('overflow', 'hidden'),
+            ('text-overflow', 'ellipsis'),
+            ('max-width', '200px')
+        ]},
+        {'selector': 'td', 'props': [
+            ('border', '1px solid #E0E0E0'),
+            ('padding', '8px'),
+            ('max-width', '200px'),
+            ('overflow', 'hidden'),
+            ('text-overflow', 'ellipsis'),
+            ('white-space', 'nowrap')
+        ]},
+        {'selector': 'tr:hover', 'props': [
+            ('background-color', '#E3F2FD')
+        ]},
+        {'selector': 'tr:nth-child(even)', 'props': [
+            ('background-color', '#F5F5F5')
+        ]},
+        {'selector': 'caption', 'props': [
+            ('caption-side', 'bottom'), 
+            ('font-style', 'italic'),
+            ('color', '#616161'),
+            ('padding', '8px'),
+            ('text-align', 'left')
+        ]},
+        # Стиль для всей таблицы
+        {'selector': '', 'props': [
+            ('border-collapse', 'collapse'),
+            ('font-family', 'Arial, sans-serif'),
+            ('width', '100%')
+        ]}
+    ])
+    
+    # Если указаны колонки для подсветки и порог
+    if highlight_cols and highlight_threshold is not None:
+        # Преобразуем в список, если передана одна колонка
+        if not isinstance(highlight_cols, list):
+            highlight_cols = [highlight_cols]
+            
+        # Подсветка значений выше порога
+        for col in highlight_cols:
+            if col in df.columns:
+                styled_df = styled_df.apply(
+                    lambda x: ['background-color: #FFEB9C' if not pd.isna(y) and 
+                                float(str(y).replace(' ', '').replace(',', '.')) > highlight_threshold else '' 
+                            for y in x], 
+                    subset=[col]
+                )
+    
+    # Добавляем подпись с информацией о размере таблицы
+    caption = f"Всего строк: {len(df)}, колонок: {len(df.columns)}"
+    styled_df = styled_df.set_caption(caption)
+    
+    return styled_df
