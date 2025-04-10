@@ -10,143 +10,209 @@ def apply_custom_css():
     """
     Применяет пользовательские CSS-стили к приложению
     """
-    # Основные стили
-    css = """
-    /* Основные стили */
-    .stApp {
-        max-width: 1200px;
-        margin: 0 auto;
+    # Проверяем наличие файла CSS
+    import os
+    css_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static', 'styles.css')
+    
+    # Если файл существует, загружаем его содержимое
+    if os.path.exists(css_path):
+        with open(css_path, 'r', encoding='utf-8') as f:
+            css = f.read()
+    else:
+        # Если файл не найден, используем встроенные стили
+        css = """
+        /* Основные стили */
+        .stApp {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        /* Заголовки */
+        .main .block-container h1, .main .block-container h2 {
+            color: #1E88E5;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+        
+        .main .block-container h3, .main .block-container h4 {
+            color: #0D47A1;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        /* Метрики */
+        [data-testid="stMetricValue"] {
+            font-size: 2rem !important;
+            font-weight: bold;
+        }
+        
+        /* Боковая панель */
+        [data-testid="stSidebar"] {
+            background-color: #f5f5f5;
+            padding: 1rem;
+        }
+        
+        [data-testid="stSidebar"] h2 {
+            color: #1E88E5;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        /* Информационные блоки */
+        .stAlert {
+            border-radius: 5px;
+        }
+        
+        /* Кнопки */
+        .stButton button {
+            width: 100%;
+        }
+        
+        /* Таблицы */
+        [data-testid="stTable"] {
+            width: 100%;
+        }
+        
+        /* Графики */
+        .js-plotly-plot {
+            margin-bottom: 20px;
+        }
+        
+        /* Графики Plotly на всю ширину */
+        .js-plotly-plot, .plotly, .plot-container {
+            width: 100% !important;
+        }
+        
+        /* Разделители */
+        hr {
+            margin: 30px 0;
+        }
+        
+        /* Подсказки */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            border-bottom: 1px dotted black;
+        }
+        
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: #f0f0f0;
+            color: #333;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        /* Стили для таблиц */
+        .dataframe {
+            width: 100%;
+            border-collapse: collapse !important;
+        }
+        
+        .dataframe th {
+            background-color: #E3F2FD !important;
+            color: #0D47A1 !important;
+            font-weight: bold !important;
+            border: 1px solid #B0BEC5 !important;
+            padding: 8px !important;
+            text-align: left !important;
+        }
+        
+        .dataframe td {
+            border: 1px solid #E0E0E0 !important;
+            padding: 8px !important;
+            text-align: left !important;
+        }
+        
+        .dataframe tr:nth-child(even) {
+            background-color: #F5F5F5 !important;
+        }
+        
+        .dataframe tr:hover {
+            background-color: #E3F2FD !important;
+        }
+        
+        /* Фиксированная ширина для контейнеров графиков */
+        [data-testid="stContainer"] {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+        """
+    
+    # Добавляем дополнительные стили для улучшения отображения таблиц и графиков
+    additional_css = """
+    /* Улучшение для графиков */
+    div.stPlotlyChart > div {
+        width: 100% !important;
     }
     
-    /* Заголовки */
-    .main .block-container h1, .main .block-container h2 {
-        color: #1E88E5;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #e0e0e0;
-        margin-bottom: 20px;
+    /* Улучшение для таблиц */
+    div.stDataFrame > div {
+        width: 100% !important;
     }
     
-    .main .block-container h3, .main .block-container h4 {
-        color: #0D47A1;
-        margin-top: 20px;
-        margin-bottom: 10px;
+    /* Красивые кнопки скачивания */
+    div.stDownloadButton > button {
+        background-color: #1E88E5 !important;
+        color: white !important;
+        border-radius: 4px !important;
+        padding: 0.5rem 1rem !important;
+        font-weight: bold !important;
+        border: none !important;
+        transition: background-color 0.3s !important;
     }
     
-    /* Метрики */
-    [data-testid="stMetricValue"] {
-        font-size: 2rem !important;
-        font-weight: bold;
+    div.stDownloadButton > button:hover {
+        background-color: #1565C0 !important;
     }
     
-    /* Информационные блоки */
-    .stAlert {
-        border-radius: 5px;
+    /* Улучшение заголовков секций */
+    div.stMarkdown h1, div.stMarkdown h2, div.stMarkdown h3 {
+        color: #0D47A1 !important;
+        border-bottom: 1px solid #B0BEC5;
+        padding-bottom: 0.3rem;
     }
     
-    /* Кнопки */
-    .stButton button {
-        width: 100%;
+    /* Улучшение виджетов выбора */
+    div.stSelectbox > div[data-baseweb="select"] > div {
+        background-color: white !important;
+        border-radius: 4px !important;
+        border-color: #B0BEC5 !important;
     }
     
-    /* Таблицы */
-    [data-testid="stTable"] {
-        width: 100%;
+    div.stSelectbox > div[data-baseweb="select"] > div:hover {
+        border-color: #1E88E5 !important;
     }
     
-    /* Графики */
-    .js-plotly-plot {
-        margin-bottom: 20px;
+    /* Улучшение для слайдеров */
+    div.stSlider > div > div > div {
+        background-color: #1E88E5 !important;
     }
     
-    /* Разделители */
-    hr {
-        margin: 30px 0;
-    }
-    
-    /* Подсказки */
-    .tooltip {
-        position: relative;
-        display: inline-block;
-        border-bottom: 1px dotted black;
-    }
-    
-    .tooltip .tooltiptext {
-        visibility: hidden;
-        width: 200px;
-        background-color: #f0f0f0;
-        color: #333;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px;
-        position: absolute;
-        z-index: 1;
-        bottom: 125%;
-        left: 50%;
-        margin-left: -100px;
-        opacity: 0;
-        transition: opacity 0.3s;
-    }
-    
-    .tooltip:hover .tooltiptext {
-        visibility: visible;
-        opacity: 1;
-    }
-    
-    /* Полный сброс стилей боковой панели для предотвращения конфликтов */
-    [data-testid="stSidebar"] {
-        background-color: #f5f5f5;
-        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-        padding: 0 !important;
-        margin: 0 !important;
-        width: 250px !important;
-        min-width: 250px !important;
-        max-width: 250px !important;
-    }
-    
-    /* Контент внутри боковой панели */
-    [data-testid="stSidebar"] > div {
-        padding: 1rem !important;
-        margin: 0 !important;
-    }
-    
-    /* Настройка радио-кнопок в боковой панели */
-    .stRadio > div {
-        margin-left: 0 !important;
-        padding-left: 0 !important;
-    }
-    
-    /* Сброс отступов стрелки сворачивания боковой панели */
-    button[kind="headerButton"] {
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    
-    /* Заголовки в боковой панели */
-    [data-testid="stSidebar"] h2, 
-    [data-testid="stSidebar"] h3, 
-    [data-testid="stSidebar"] .stRadio label {
-        margin-left: 0 !important;
-        padding-left: 0 !important;
-    }
-    
-    /* Агрессивный сброс стилей для всех элементов боковой панели */
-    [data-testid="stSidebar"] * {
-        box-sizing: border-box;
-    }
-    
-    /* Принудительное применение стилей к родительским элементам сайдбара */
-    section[data-testid="stSidebar"] {
-        margin-left: 0 !important;
-        padding-left: 0 !important;
-        width: 250px !important;
-    }
-    
-    /* Решение проблемы с отступом главного контейнера сайдбара */
-    .css-1d391kg, .css-1wrcr25 {
-        margin-left: 0 !important;
-        padding-left: 0 !important;
+    /* Фиксы для контейнеров */
+    section[data-testid="stSidebar"] > div {
+        background-color: #F5F5F5 !important;
     }
     """
+    
+    # Объединяем стили
+    css += additional_css
     
     # Применяем стили
     st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
