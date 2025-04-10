@@ -53,7 +53,7 @@ class SecurityAnalyzer:
             total_materials = len(unique_materials)
             
             # Для очень больших объемов данных предлагаем оптимизированный анализ
-            if total_materials > 10000:
+            if (total_materials > 10000):
                 limit_analysis = st.checkbox(
                     f"Обнаружено очень много материалов ({total_materials}). Ограничить анализ до 5000 случайных материалов?",
                     value=True
@@ -163,9 +163,9 @@ class SecurityAnalyzer:
             return risk_df
         
         except Exception as e:
-            st.error(f"Ошибка при анализе безопасности: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
+            from modules.utils import show_error_message
+            show_error_message(e, "Ошибка при анализе безопасности", show_traceback=True)
+            st.info("Попробуйте ограничить количество анализируемых материалов или использовать меньший набор данных.")
             return pd.DataFrame()
     
     def _calculate_risk_metrics(self, material_data):

@@ -671,33 +671,46 @@ class ForecastPreparation:
                     if data_size_mb > 100:
                         st.warning(f"Размер данных: {data_size_mb:.1f} МБ. Экспорт может занять некоторое время.")
                     
-                    # Экспортируем данные
-                    progress_bar.progress(0.9)
-                    status_text.text(f"Экспорт данных в формате {export_format}...")
-                    
-                    if export_format == "CSV":
-                        csv_data = self._export_to_csv(full_data)
-                        file_name = f"custom_filtered_data.csv"
+                    try:
+                        # Экспортируем данные
+                        progress_bar.progress(0.9)
+                        status_text.text(f"Экспорт данных в формате {export_format}...")
                         
-                        st.download_button(
-                            label=f"Скачать {file_name}",
-                            data=csv_data,
-                            file_name=file_name,
-                            mime="text/csv"
-                        )
-                    else:  # Excel
-                        excel_data = self._export_to_excel(full_data, "Отфильтрованные данные")
-                        file_name = f"custom_filtered_data.xlsx"
+                        if export_format == "CSV":
+                            csv_data = self._export_to_csv(full_data)
+                            file_name = f"custom_filtered_data.csv"
+                            
+                            st.download_button(
+                                label=f"Скачать {file_name}",
+                                data=csv_data,
+                                file_name=file_name,
+                                mime="text/csv; charset=utf-8-sig"  # Указываем кодировку явно
+                            )
+                        else:  # Excel
+                            excel_data = self._export_to_excel(full_data, "Отфильтрованные данные")
+                            file_name = f"custom_filtered_data.xlsx"
+                            
+                            st.download_button(
+                                label=f"Скачать {file_name}",
+                                data=excel_data,
+                                file_name=file_name,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
                         
-                        st.download_button(
-                            label=f"Скачать {file_name}",
-                            data=excel_data,
-                            file_name=file_name,
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                    
-                    progress_bar.progress(1.0)
-                    status_text.text("Экспорт завершен!")
+                        progress_bar.progress(1.0)
+                        status_text.text("Экспорт завершен!")
+                        
+                    except Exception as e:
+                        progress_bar.progress(1.0)
+                        status_text.text("Ошибка при экспорте!")
+                        from modules.utils import show_error_message
+                        show_error_message(e, "Ошибка при экспорте данных", show_traceback=True)
+                        
+                        # Предлагаем альтернативный вариант экспорта
+                        st.info("""
+                        Попробуйте выполнить экспорт еще раз с меньшим объемом данных или в другом формате.
+                        Для очень больших объемов данных рекомендуется использовать CSV формат вместо Excel.
+                        """)
                     
                     st.success(f"Данные успешно отфильтрованы и подготовлены! "
                              f"Количество материалов после фильтрации: {all_filtered_data['Материал'].nunique()}, "

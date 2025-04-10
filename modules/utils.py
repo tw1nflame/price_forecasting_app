@@ -402,3 +402,72 @@ def format_streamlit_dataframe(df, height=None):
     styled_df = styled_df.applymap(highlight_negative)
     
     return styled_df
+
+def show_error_message(error, error_type="Ошибка", show_traceback=False):
+    """
+    Отображает сообщение об ошибке в приятном для пользователя формате
+    
+    Args:
+        error: объект исключения или текст ошибки
+        error_type: тип ошибки (например, "Ошибка загрузки данных")
+        show_traceback: показывать ли трассировку стека
+    """
+    import traceback
+    
+    # Главное сообщение об ошибке
+    error_html = f"""
+    <div style="background-color: #FFEBEE; padding: 15px; border-radius: 5px; margin: 10px 0;">
+        <h3 style="color: #B71C1C; margin-top: 0;">{error_type}</h3>
+        <p style="margin-bottom: 5px; font-size: 16px;">{str(error)}</p>
+    """
+    
+    # Добавляем советы по решению типичных проблем
+    if "кодировк" in str(error).lower() or "encod" in str(error).lower():
+        error_html += """
+        <div style="background-color: #FFF3E0; padding: 10px; border-radius: 3px; margin-top: 10px;">
+            <p style="margin: 0; font-weight: bold;">Возможные решения:</p>
+            <ul style="margin-top: 5px;">
+                <li>Проверьте кодировку файла (UTF-8, Windows-1251)</li>
+                <li>Исключите из файла нестандартные символы</li>
+                <li>Убедитесь, что файл не поврежден</li>
+            </ul>
+        </div>
+        """
+    elif "памят" in str(error).lower() or "memory" in str(error).lower():
+        error_html += """
+        <div style="background-color: #FFF3E0; padding: 10px; border-radius: 3px; margin-top: 10px;">
+            <p style="margin: 0; font-weight: bold;">Возможные решения:</p>
+            <ul style="margin-top: 5px;">
+                <li>Попробуйте загрузить файл меньшего размера</li>
+                <li>Увеличьте ограничение памяти в настройках приложения</li>
+                <li>Разделите большой файл на несколько меньших</li>
+            </ul>
+        </div>
+        """
+    elif "файл" in str(error).lower() or "file" in str(error).lower():
+        error_html += """
+        <div style="background-color: #FFF3E0; padding: 10px; border-radius: 3px; margin-top: 10px;">
+            <p style="margin: 0; font-weight: bold;">Возможные решения:</p>
+            <ul style="margin-top: 5px;">
+                <li>Проверьте формат и структуру файла</li>
+                <li>Убедитесь, что файл содержит все необходимые колонки</li>
+                <li>Попробуйте открыть файл в Excel и сохранить в формате CSV</li>
+            </ul>
+        </div>
+        """
+    
+    # Добавляем трассировку стека, если запрошено
+    if show_traceback:
+        stack_trace = traceback.format_exc()
+        error_html += f"""
+        <details>
+            <summary style="cursor: pointer; color: #616161; margin-top: 10px;">Показать техническую информацию</summary>
+            <pre style="background-color: #F5F5F5; padding: 10px; border-radius: 3px; margin-top: 5px; 
+                      white-space: pre-wrap; font-size: 12px; color: #212121;">{stack_trace}</pre>
+        </details>
+        """
+    
+    error_html += "</div>"
+    
+    # Отображаем HTML
+    st.markdown(error_html, unsafe_allow_html=True)

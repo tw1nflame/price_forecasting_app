@@ -307,4 +307,6 @@ class DataLoader:
             raise Exception(f"Не удалось загрузить данные ни с одной кодировкой:\n{error_message}")
         
         except Exception as e:
-            raise Exception(f"Ошибка при загрузке данных: {str(e)}")
+            from modules.utils import show_error_message
+            show_error_message(e, "Ошибка при загрузке данных", show_traceback=True)
+            st.info("Попробуйте изменить параметры загрузки или используйте другой файл.")
