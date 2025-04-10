@@ -4,6 +4,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import io  # Add this import for BytesIO
 
 class SecurityAnalyzer:
     """
@@ -388,7 +389,7 @@ class SecurityAnalyzer:
         filtered_risk_df = risk_df.copy()
         
         if risk_category_filter != "Все":
-            filtered_risk_df = filtered_risk_df[filtered_risk_df['Категория риска'] == risk_category_filter]
+            filtered_risk_df = filtered_risk_df[risk_category_filter == filtered_risk_df['Категория риска']]
         
         if segment_filter != "Все":
             filtered_risk_df = filtered_risk_df[filtered_risk_df['Сегмент'] == segment_filter]
@@ -398,12 +399,52 @@ class SecurityAnalyzer:
         
         # 5. Экспорт данных
         if not filtered_risk_df.empty:
-            csv_data = filtered_risk_df.to_csv(index=False).encode('utf-8')
+            buffer = io.BytesIO()
+            filtered_risk_df.to_csv(buffer, index=False, encoding='utf-8-sig')
+            buffer.seek(0)
             st.download_button(
                 label="Скачать отчет о рисках (CSV)",
-                data=csv_data,
+                data=buffer,
                 file_name="security_risk_report.csv",
-                mime="text/csv"
+                mime="text/csv; charset=utf-8-sig"
+            )
+            
+            # Добавляем кнопку для скачивания Excel
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                filtered_risk_df.to_excel(writer, sheet_name='Отчет о рисках', index=False)
+                
+                # Базовое форматирование Excel
+                workbook = writer.book
+                worksheet = writer.sheets['Отчет о рисках']
+                
+                # Формат для заголовков
+                header_format = workbook.add_format({
+                    'bold': True,
+                    'text_wrap': True,
+                    'valign': 'top',
+                    'bg_color': '#D7E4BC',
+                    'border': 1
+                })
+                
+                # Применяем формат заголовка
+                for col_num, value in enumerate(filtered_risk_df.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                    
+                # Автоподбор ширины столбцов
+                for i, col in enumerate(filtered_risk_df.columns):
+                    column_width = max(
+                        filtered_risk_df[col].astype(str).map(len).max(), 
+                        len(col)
+                    ) + 2
+                    worksheet.set_column(i, i, column_width)
+            
+            excel_buffer.seek(0)
+            st.download_button(
+                label="Скачать отчет о рисках (Excel)",
+                data=excel_buffer,
+                file_name="security_risk_report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
     
     def highlight_suspicious_materials(self, data, material_code=None):
@@ -667,3 +708,210 @@ class SecurityAnalyzer:
             st.subheader("Обнаруженные округленные цены")
             st.write(f"**Процент округленных цен:** {len(rounded_prices) / len(unique_prices) * 100:.1f}%")
             st.dataframe(pd.DataFrame(rounded_prices))
+            
+        # Добавляем кнопку для экспорта детального анализа в Excel
+        excel_data = self.export_detailed_analysis(data, material_code)
+        if excel_data is not None:
+            st.download_button(
+                label="Скачать детальный анализ (Excel)",
+                data=excel_data,
+                file_name=f"security_analysis_{material_code}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    
+    def export_detailed_analysis(self, data, material_code):
+        """
+        Экспортирует детальный анализ подозрительного материала в Excel
+        
+        Args:
+            data: pandas DataFrame с обработанными данными
+            material_code: код материала для анализа
+            
+        Returns:
+            bytes: содержимое Excel-файла
+        """
+        # Фильтруем данные по выбранному материалу
+        material_data = data[data['Материал'] == material_code].sort_values('ДатаСоздан')
+        
+        if material_data.empty:
+            return None
+        
+        # Создаем буфер для Excel
+        excel_buffer = io.BytesIO()
+        
+        # Создаем Excel с несколькими листами
+        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+            workbook = writer.book
+            
+            # 1. Основная информация о материале
+            material_info = pd.DataFrame({
+                'Параметр': [
+                    'Материал', 
+                    'Количество записей', 
+                    'Первая дата', 
+                    'Последняя дата',
+                    'Средняя цена',
+                    'Минимальная цена',
+                    'Максимальная цена',
+                    'Стандартное отклонение',
+                    'Коэффициент вариации (%)'
+                ],
+                'Значение': [
+                    material_code,
+                    len(material_data),
+                    material_data['ДатаСоздан'].min().strftime('%d.%m.%Y'),
+                    material_data['ДатаСоздан'].max().strftime('%d.%m.%Y'),
+                    f"{material_data['Цена нетто'].mean():.2f}",
+                    f"{material_data['Цена нетто'].min():.2f}",
+                    f"{material_data['Цена нетто'].max():.2f}",
+                    f"{material_data['Цена нетто'].std():.2f}",
+                    f"{(material_data['Цена нетто'].std() / material_data['Цена нетто'].mean() * 100):.2f}%"
+                ]
+            })
+            
+            material_info.to_excel(writer, sheet_name='Общая информация', index=False)
+            
+            # Форматирование
+            worksheet = writer.sheets['Общая информация']
+            header_format = workbook.add_format({'bold': True, 'bg_color': '#D7E4BC'})
+            for col_num, value in enumerate(material_info.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+            worksheet.set_column(0, 0, 25)
+            worksheet.set_column(1, 1, 30)
+            
+            # 2. Детальные данные о закупках
+            material_data.to_excel(writer, sheet_name='Данные закупок', index=False)
+            
+            # Форматирование
+            worksheet = writer.sheets['Данные закупок']
+            for col_num, value in enumerate(material_data.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+                
+            # Автоподбор ширины столбцов
+            for i, col in enumerate(material_data.columns):
+                column_width = max(
+                    material_data[col].astype(str).map(len).max(), 
+                    len(col)
+                ) + 2
+                worksheet.set_column(i, i, min(column_width, 30))  # Не более 30 символов ширины
+                
+            # 3. Анализ аномалий
+            
+            # Вычисляем скользящее среднее и стандартное отклонение
+            material_data_copy = material_data.copy()
+            material_data_copy['rolling_mean'] = material_data_copy['Цена нетто'].rolling(window=5, min_periods=1).mean()
+            material_data_copy['rolling_std'] = material_data_copy['Цена нетто'].rolling(window=5, min_periods=1).std()
+            
+            # Определяем верхнюю и нижнюю границы для аномалий (2 стандартных отклонения)
+            material_data_copy['upper_bound'] = material_data_copy['rolling_mean'] + 2 * material_data_copy['rolling_std']
+            material_data_copy['lower_bound'] = material_data_copy['rolling_mean'] - 2 * material_data_copy['rolling_std']
+            
+            # Помечаем аномалии
+            material_data_copy['is_anomaly'] = (
+                (material_data_copy['Цена нетто'] > material_data_copy['upper_bound']) | 
+                (material_data_copy['Цена нетто'] < material_data_copy['lower_bound'])
+            )
+            
+            # Фильтруем только аномалии
+            anomalies = material_data_copy[material_data_copy['is_anomaly']]
+            
+            if not anomalies.empty:
+                anomalies = anomalies[['ДатаСоздан', 'Цена нетто', 'rolling_mean', 'upper_bound', 'lower_bound']]
+                anomalies.columns = ['Дата', 'Цена', 'Скользящее среднее', 'Верхняя граница', 'Нижняя граница']
+                anomalies.to_excel(writer, sheet_name='Аномалии', index=False)
+                
+                # Форматирование
+                worksheet = writer.sheets['Аномалии']
+                for col_num, value in enumerate(anomalies.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                    
+                # Выделяем аномальные цены красным
+                red_format = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+                for row_num, _ in enumerate(anomalies.index):
+                    worksheet.write(row_num + 1, 1, anomalies.iloc[row_num, 1], red_format)
+                    
+                # Автоподбор ширины столбцов
+                for i, col in enumerate(anomalies.columns):
+                    column_width = max(
+                        anomalies[col].astype(str).map(len).max(), 
+                        len(col)
+                    ) + 2
+                    worksheet.set_column(i, i, min(column_width, 20))
+            
+            # 4. Периодичность закупок
+            if len(material_data) > 1:
+                material_data_copy['days_diff'] = material_data_copy['ДатаСоздан'].diff().dt.days
+                
+                periods_data = material_data_copy[['ДатаСоздан', 'days_diff']].dropна()
+                periods_data.columns = ['Дата', 'Интервал (дни)']
+                
+                periods_data.to_excel(writer, sheet_name='Периодичность', index=False)
+                
+                # Форматирование
+                worksheet = writer.sheets['Периодичность']
+                for col_num, value in enumerate(periods_data.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                    
+                # Выделяем короткие интервалы оранжевым (возможное дробление закупок)
+                orange_format = workbook.add_format({'bg_color': '#FFEB9C', 'font_color': '#9C6500'})
+                for row_num, _ in enumerate(periods_data.index):
+                    if periods_data.iloc[row_num, 1] <= self.risk_thresholds['purchase_frequency']:
+                        worksheet.write(row_num + 1, 1, periods_data.iloc[row_num, 1], orange_format)
+                        
+                # Автоподбор ширины столбцов
+                worksheet.set_column(0, 0, 20)
+                worksheet.set_column(1, 1, 15)
+            
+            # 5. Расчет факторов риска
+            risk_metrics = self._calculate_risk_metrics(material_data)
+            risk_category, risk_factors = self._determine_risk_category(risk_metrics)
+            
+            risk_data = pd.DataFrame({
+                'Показатель': [
+                    'Волатильность цены (%)',
+                    'Индекс аномальности цены',
+                    'Индекс дробления закупок',
+                    'Активность в конце месяца (%)',
+                    'Активность в конце квартала (%)',
+                    'Доля округленных цен (%)',
+                    'Общий индекс подозрительности',
+                    'Категория риска',
+                    'Факторы риска'
+                ],
+                'Значение': [
+                    f"{risk_metrics['volatility']:.2f}%",
+                    f"{risk_metrics['price_anomaly_index']:.2f}",
+                    f"{risk_metrics['purchase_fragmentation']:.2f}%",
+                    f"{risk_metrics['end_of_month_activity']:.2f}%",
+                    f"{risk_metrics['end_of_quarter_activity']:.2f}%",
+                    f"{risk_metrics['rounded_prices_ratio']:.2f}%",
+                    f"{risk_metrics['suspicion_index']:.2f}",
+                    risk_category,
+                    risk_factors
+                ]
+            })
+            
+            risk_data.to_excel(writer, sheet_name='Оценка рисков', index=False)
+            
+            # Форматирование
+            worksheet = writer.sheets['Оценка рисков']
+            for col_num, value in enumerate(risk_data.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+                
+            # Подсветка категории риска
+            risk_color_format = None
+            if risk_category == "Высокий":
+                risk_color_format = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+            elif risk_category == "Средний":
+                risk_color_format = workbook.add_format({'bg_color': '#FFEB9C', 'font_color': '#9C6500'})
+            else:
+                risk_color_format = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100'})
+                
+            worksheet.write(7, 1, risk_category, risk_color_format)
+            
+            # Автоподбор ширины столбцов
+            worksheet.set_column(0, 0, 30)
+            worksheet.set_column(1, 1, 50)
+        
+        excel_buffer.seek(0)
+        return excel_buffer.getvalue()

@@ -820,7 +820,7 @@ class ForecastPreparation:
                 ]
                 
                 # Колонки, которые есть в segment_data
-                available_detail_columns = [col for col in detail_columns if col в segment_data.columns]
+                available_detail_columns = [col for col in detail_columns if col in segment_data.columns]
                 
                 if available_detail_columns:
                     # Вместо обработки каждой колонки отдельно, создаем промежуточный датафрейм
