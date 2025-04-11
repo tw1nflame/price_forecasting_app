@@ -663,13 +663,15 @@ def show_performance_info():
         # Получаем информацию о системе
         system_memory = psutil.virtual_memory()
         system_memory_usage_percent = system_memory.percent
+        system_cpu_percent = psutil.cpu_percent(interval=0.1) # Общая загрузка CPU системы
         
         # Создаем HTML для вывода информации
         performance_html = f"""
         <div style="background-color: #E8F5E9; padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 0.8em;">
             <h4 style="color: #2E7D32; margin-top: 0; margin-bottom: 5px;">Информация о производительности</h4>
             <p style="margin: 2px 0;"><strong>Использование памяти:</strong> {memory_usage_mb:.1f} МБ ({(memory_usage_mb/system_memory.total*100):.1f}% от доступной)</p>
-            <p style="margin: 2px 0;"><strong>Загрузка CPU:</strong> {cpu_percent:.1f}%</p>
+            <p style="margin: 2px 0;"><strong>Загрузка CPU (приложение):</strong> {cpu_percent:.1f}%</p>
+            <p style="margin: 2px 0;"><strong>Загрузка CPU (система):</strong> {system_cpu_percent:.1f}%</p>
             <p style="margin: 2px 0;"><strong>Загрузка памяти системы:</strong> {system_memory_usage_percent:.1f}%</p>
             <p style="margin: 2px 0;"><strong>Доступно памяти:</strong> {(system_memory.available/1024/1024):.1f} МБ</p>
         </div>
