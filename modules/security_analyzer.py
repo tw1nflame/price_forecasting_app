@@ -158,7 +158,7 @@ class SecurityAnalyzer:
                 return pd.DataFrame()
             
             # Отображаем результаты
-            self._display_security_analysis_results(risk_df)
+            # self._display_security_analysis_results(risk_df) # УДАЛЕНО
             
             return risk_df
         
@@ -345,7 +345,7 @@ class SecurityAnalyzer:
         
         return risk_category, ", ".join(risk_factors) if risk_factors else "Нет выявленных факторов"
     
-    def _display_security_analysis_results(self, risk_df):
+    def display_security_analysis_results(self, risk_df):
         """
         Отображает результаты анализа безопасности
         
@@ -414,72 +414,86 @@ class SecurityAnalyzer:
         st.subheader("Топ материалов с высоким индексом подозрительности")
         
         # Фильтруем материалы с высоким риском
-        high_risk_materials = risk_df.sort_values('Индекс подозрительности', ascending=False).head(20)
-        
-        # Создаем таблицу с подсветкой
-        for index, row in high_risk_materials.iterrows():
-            with st.container():
-                col1, col2, col3 = st.columns([3, 2, 5])
-                
-                with col1:
-                    st.write(f"**Материал:** {row['Материал']}")
-                    st.write(f"**Сегмент:** {row['Сегмент']}")
-                
-                with col2:
-                    # Цветовая индикация риска
-                    risk_color = "#FF4B4B" if row['Категория риска'] == "Высокий" else "#FFA72B" if row['Категория риска'] == "Средний" else "#2ECC71"
-                    st.markdown(f"""
-                    <div style="background-color: {risk_color}; padding: 10px; border-radius: 5px; color: white;">
-                        <strong>Риск:</strong> {row['Категория риска']}<br>
-                        <strong>Индекс:</strong> {row['Индекс подозрительности']:.1f}
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col3:
-                    st.markdown(f"**Факторы риска:** {row['Факторы риска']}")
-                
-                st.divider()
+        # Убедимся, что risk_df передан и не пуст
+        if risk_df is None or risk_df.empty:
+             st.warning("Нет данных для отображения топа материалов с риском.")
+             high_risk_materials = pd.DataFrame() # Пустой DataFrame
+        else:
+             high_risk_materials = risk_df.sort_values('Индекс подозрительности', ascending=False).head(20)
+
+        # Создаем таблицу с подсветкой (только если есть материалы)
+        if not high_risk_materials.empty:
+             for index, row in high_risk_materials.iterrows():
+                 with st.container():
+                     col1, col2, col3 = st.columns([3, 2, 5])
+                     
+                     with col1:
+                         st.write(f"**Материал:** {row['Материал']}")
+                         st.write(f"**Сегмент:** {row['Сегмент']}")
+                     
+                     with col2:
+                         # Цветовая индикация риска
+                         risk_color = "#FF4B4B" if row['Категория риска'] == "Высокий" else "#FFA72B" if row['Категория риска'] == "Средний" else "#2ECC71"
+                         st.markdown(f"""
+                         <div style="background-color: {risk_color}; padding: 10px; border-radius: 5px; color: white;">
+                             <strong>Риск:</strong> {row['Категория риска']}<br>
+                             <strong>Индекс:</strong> {row['Индекс подозрительности']:.1f}
+                         </div>
+                         """, unsafe_allow_html=True)
+                     
+                     with col3:
+                         st.markdown(f"**Факторы риска:** {row['Факторы риска']}")
+                     
+                     st.divider()
         
         # 4. Фильтр для поиска конкретных материалов
         st.subheader("Поиск материалов по уровню риска")
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            risk_category_filter = st.selectbox(
-                "Категория риска:",
-                ["Все", "Высокий", "Средний", "Низкий"]
+        # Убедимся, что risk_df передан и не пуст для фильтрации
+        if risk_df is None or risk_df.empty:
+            st.warning("Нет данных для фильтрации и экспорта.")
+            filtered_risk_df = pd.DataFrame() # Пустой DataFrame
+        else:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                risk_category_filter = st.selectbox(
+                    "Категория риска:",
+                    ["Все", "Высокий", "Средний", "Низкий"],
+                    key='security_risk_category_filter' # Добавляем ключ для уникальности
+                )
+            
+            with col2:
+                segment_filter = st.selectbox(
+                    "Сегмент:",
+                    ["Все"] + list(risk_df['Сегмент'].unique()),
+                    key='security_segment_filter' # Добавляем ключ для уникальности
+                )
+            
+            # Применяем фильтры
+            filtered_risk_df = risk_df.copy()
+            
+            if risk_category_filter != "Все":
+                filtered_risk_df = filtered_risk_df[risk_category_filter == filtered_risk_df['Категория риска']]
+            
+            if segment_filter != "Все":
+                filtered_risk_df = filtered_risk_df[filtered_risk_df['Сегмент'] == segment_filter]
+
+            # Отображаем отфильтрованные данные
+            from modules.utils import create_styled_dataframe
+            st.dataframe(
+                create_styled_dataframe(
+                    filtered_risk_df,
+                    highlight_cols=['Индекс подозрительности'],
+                    highlight_threshold=70,
+                    precision=2
+                ),
+                use_container_width=True,
+                height=500
             )
-        
-        with col2:
-            segment_filter = st.selectbox(
-                "Сегмент:",
-                ["Все"] + list(risk_df['Сегмент'].unique())
-            )
-        
-        # Применяем фильтры
-        filtered_risk_df = risk_df.copy()
-        
-        if risk_category_filter != "Все":
-            filtered_risk_df = filtered_risk_df[risk_category_filter == filtered_risk_df['Категория риска']]
-        
-        if segment_filter != "Все":
-            filtered_risk_df = filtered_risk_df[filtered_risk_df['Сегмент'] == segment_filter]
-        
-        # Отображаем отфильтрованные данные
-        from modules.utils import create_styled_dataframe
-        st.dataframe(
-            create_styled_dataframe(
-                filtered_risk_df,
-                highlight_cols=['Индекс подозрительности'],
-                highlight_threshold=70,
-                precision=2
-            ),
-            use_container_width=True,
-            height=500
-        )
         
         # 5. Экспорт данных
+        # Кнопки экспорта показываем только если есть отфильтрованные данные
         if not filtered_risk_df.empty:
             buffer = io.BytesIO()
             filtered_risk_df.to_csv(buffer, index=False, encoding='utf-8-sig')

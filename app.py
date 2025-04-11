@@ -227,16 +227,27 @@ elif page == "Сегментация для прогнозирования":
         st.warning("Сначала загрузите и обработайте данные")
 elif page == "Анализ безопасности":
     if 'processed_data' in st.session_state and 'materials_segments' in st.session_state:
-        security_risks = security_analyzer.analyze_security_risks(
-            st.session_state.processed_data, 
-            st.session_state.materials_segments
-        )
+        # Запускаем анализ ТОЛЬКО если результаты еще не сохранены в сессии
+        if 'security_risks' not in st.session_state:
+            with st.spinner("Анализ безопасности данных..."):
+                st.session_state.security_risks = security_analyzer.analyze_security_risks(
+                    st.session_state.processed_data, 
+                    st.session_state.materials_segments
+                )
+
+        # Отображаем результаты анализа, если они есть
+        if 'security_risks' in st.session_state and st.session_state.security_risks is not None:
+            security_analyzer.display_security_analysis_results(st.session_state.security_risks)
         
-        # Если есть результаты анализа и пользователь хочет посмотреть детали
-        if not security_risks.empty and st.button("Показать детальный анализ для материала с высоким риском"):
-            # Выбираем материал с наивысшим индексом подозрительности
-            high_risk_material = security_risks.iloc[0]['Материал']
-            security_analyzer.highlight_suspicious_materials(st.session_state.processed_data, high_risk_material)
+            # Кнопка для детального анализа остается здесь, но использует сохраненные риски
+            if not st.session_state.security_risks.empty and st.button("Показать детальный анализ для материала с высоким риском"):
+                # Выбираем материал с наивысшим индексом подозрительности из СОХРАНЕННЫХ результатов
+                high_risk_material = st.session_state.security_risks.iloc[0]['Материал']
+                # Вызываем функцию детального анализа (она не создает кнопки скачивания, все в порядке)
+                security_analyzer.highlight_suspicious_materials(st.session_state.processed_data, high_risk_material)
+        else:
+             st.info("Результаты анализа безопасности отсутствуют или не были сгенерированы.")
+
     elif 'processed_data' not in st.session_state:
         st.warning("Сначала загрузите и обработайте данные")
     else:
