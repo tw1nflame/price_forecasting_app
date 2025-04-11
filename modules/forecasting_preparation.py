@@ -172,6 +172,7 @@ class ForecastPreparation:
                 ~inactive_mask & 
                 ~insufficient_history_mask & 
                 ~constant_price_mask & 
+                ~high_volatility_mask & 
                 ~ml_forecasting_mask & 
                 (material_metrics['record_count'] >= 5)
             )
@@ -381,7 +382,7 @@ class ForecastPreparation:
     
     def _export_all_segments(self, segments):
         """
-        Экспортирует все сегменты в один ZIP-архив
+        Экспортирует все сегменты в один ZIP-архив.
         """
         import zipfile
         import os
@@ -435,7 +436,8 @@ class ForecastPreparation:
                     # Сортируем сегменты по размеру (от меньшего к большему)
                     sorted_segments = sorted(non_empty_segments.items(), key=lambda x: len(x[1]))
                     
-                    with zipfile.ZipFile(zip_path, 'w') as zipf:
+                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf: # Используем сжатие
+                        
                         # Для каждого сегмента
                         segment_count = 0
                         total_segments = len(sorted_segments)
@@ -527,7 +529,8 @@ class ForecastPreparation:
     
     def _export_custom(self, segments):
         """
-        Настраиваемый экспорт с возможностью фильтрации
+        Настраиваемый экспорт с возможностью фильтрации. 
+        Экспортирует отфильтрованные данные в один файл Excel или CSV.
         """
         st.write("Настраиваемый экспорт с фильтрацией материалов:")
         
@@ -646,16 +649,11 @@ class ForecastPreparation:
                     status_text.text("Подготовка файла для экспорта...")
                     
                     # Добавляем колонку с сегментом, если она еще не добавлена
+                    # Используем all_filtered_data, где уже есть колонка 'Сегмент' после фильтрации
                     if 'Сегмент' in all_filtered_data.columns and 'Сегмент' not in full_data.columns:
-                        # Создаем маппинг материал -> сегмент
-                        material_to_segment = dict(zip(
-                            all_filtered_data['Материал'], 
-                            all_filtered_data['Сегмент']
-                        ))
-                        
-                        # Добавляем колонку сегмента
-                        full_data['Сегмент'] = full_data['Материал'].map(material_to_segment)
-                    
+                        material_to_segment_map = dict(zip(all_filtered_data['Материал'], all_filtered_data['Сегмент']))
+                        full_data['Сегмент'] = full_data['Материал'].map(material_to_segment_map).fillna('Неизвестно')
+
                     # Сообщаем о размере данных
                     data_size_mb = full_data.memory_usage(deep=True).sum() / (1024 * 1024)
                     if data_size_mb > 100:
@@ -666,27 +664,24 @@ class ForecastPreparation:
                         progress_bar.progress(0.9)
                         status_text.text(f"Экспорт данных в формате {export_format}...")
                         
+                        # --- Экспорт в один файл (Excel или CSV) ---
                         if export_format == "CSV":
-                            csv_data = self._export_to_csv(full_data)
-                            file_name = f"custom_filtered_data.csv"
-                            
-                            st.download_button(
-                                label=f"Скачать {file_name}",
-                                data=csv_data,
-                                file_name=file_name,
-                                mime="text/csv; charset=utf-8-sig"  # Указываем кодировку явно
-                            )
+                            file_data = self._export_to_csv(full_data)
+                            file_name = "custom_filtered_data.csv"
+                            mime_type = "text/csv; charset=utf-8-sig"
                         else:  # Excel
-                            excel_data = self._export_to_excel(full_data, "Отфильтрованные данные")
-                            file_name = f"custom_filtered_data.xlsx"
+                            file_data = self._export_to_excel(full_data, "Отфильтрованные данные")
+                            file_name = "custom_filtered_data.xlsx"
+                            mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             
-                            st.download_button(
-                                label=f"Скачать {file_name}",
-                                data=excel_data,
-                                file_name=file_name,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
-                        
+                        st.download_button(
+                            label=f"Скачать {file_name}",
+                            data=file_data,
+                            file_name=file_name,
+                            mime=mime_type
+                        )
+                        # --- Конец экспорта в один файл ---
+
                         progress_bar.progress(1.0)
                         status_text.text("Экспорт завершен!")
                         
