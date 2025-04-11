@@ -4,6 +4,10 @@ import io
 import re
 import chardet
 import copy
+import logging
+
+# Настройка логирования
+logger = logging.getLogger(__name__)
 
 class DataLoader:
     """
@@ -13,6 +17,9 @@ class DataLoader:
     def __init__(self):
         self.encoding_options = ["cp1251", "utf-8", "latin-1", "iso-8859-1", "windows-1251", "koi8-r", "mac-cyrillic"]
         self.delimiter_options = [";", ",", "\t", "|"]
+        # Определяем обязательные и рекомендуемые колонки
+        self.mandatory_columns = ["Материал", "ДатаСоздан", "Цена нетто"]
+        self.recommended_columns = ["за", "ЕЦЗ", "Влт", "Курс", "З-д", "ДокумЗакуп", "ГрЗ", "ГруппаМтр"]
     
     def render(self):
         """
@@ -20,9 +27,10 @@ class DataLoader:
         """
         st.header("Загрузка данных")
         
-        st.write("""
+        st.markdown(f"""
         Загрузите CSV-файл с данными о материалах. 
-        Ожидаемые колонки: Материал, ДатаСоздан, Цена нетто, за, ЕЦЗ, Влт, Курс, З-д, ДокумЗакуп, ГрЗ, ГруппаМтр
+        - **Обязательные колонки:** `{', '.join(self.mandatory_columns)}`
+        - **Рекомендуемые колонки (для полного анализа):** `{', '.join(self.recommended_columns)}`
         """)
         
         uploaded_file = st.file_uploader("Выберите CSV-файл", type=["csv"])
@@ -76,32 +84,48 @@ class DataLoader:
                             # Загружаем весь файл
                             data = self._load_data(load_buffer, encoding, delimiter, skip_rows, decimal_separator)
                             
-                            # Сохраняем данные в session_state
-                            st.session_state.data = data
-                            
-                            # Очищаем другие сессионные данные, если они существуют
-                            if 'processed_data' in st.session_state:
-                                del st.session_state.processed_data
-                            if 'materials_segments' in st.session_state:
-                                del st.session_state.materials_segments
-                            if 'segments_stats' in st.session_state:
-                                del st.session_state.segments_stats
-                            
-                            st.success(f"Данные успешно загружены! Загружено {data.shape[0]} строк и {data.shape[1]} столбцов.")
-                            
-                            # Показываем информацию о данных
-                            st.subheader("Информация о данных")
-                            st.write(f"Количество строк: {data.shape[0]}")
-                            st.write(f"Количество столбцов: {data.shape[1]}")
-                            
-                            # Показываем пример данных
-                            st.subheader("Пример данных")
-                            from modules.utils import format_streamlit_dataframe
-                            st.dataframe(
-                                format_streamlit_dataframe(data.head()),
-                                use_container_width=True,
-                                height=400  # Фиксированная высота для лучшего отображения
-                            )
+                            # Проверка на наличие обязательных колонок после загрузки
+                            if data is not None:
+                                missing_mandatory = [col for col in self.mandatory_columns if col not in data.columns]
+                                if missing_mandatory:
+                                    st.error(f"Ошибка: Отсутствуют обязательные колонки: {', '.join(missing_mandatory)}. Загрузка отменена.")
+                                    # Очищаем данные, чтобы предотвратить дальнейшую обработку
+                                    if 'data' in st.session_state: del st.session_state.data
+                                    data = None # Устанавливаем data в None, чтобы не продолжать
+                                else:
+                                    # Проверка на наличие рекомендуемых колонок (только информируем)
+                                    missing_recommended = [col for col in self.recommended_columns if col not in data.columns]
+                                    if missing_recommended:
+                                        st.warning(f"Внимание: Отсутствуют рекомендуемые колонки: {', '.join(missing_recommended)}. Некоторые функции анализа могут быть недоступны.")
+
+                            # Продолжаем только если данные были успешно загружены и проверены
+                            if data is not None:
+                                # Сохраняем данные в session_state
+                                st.session_state.data = data
+                                
+                                # Очищаем другие сессионные данные, если они существуют
+                                if 'processed_data' in st.session_state:
+                                    del st.session_state.processed_data
+                                if 'materials_segments' in st.session_state:
+                                    del st.session_state.materials_segments
+                                if 'segments_stats' in st.session_state:
+                                    del st.session_state.segments_stats
+                                
+                                st.success(f"Данные успешно загружены! Загружено {data.shape[0]} строк и {data.shape[1]} столбцов.")
+                                
+                                # Показываем информацию о данных
+                                st.subheader("Информация о данных")
+                                st.write(f"Количество строк: {data.shape[0]}")
+                                st.write(f"Количество столбцов: {data.shape[1]}")
+                                
+                                # Показываем пример данных
+                                st.subheader("Пример данных")
+                                from modules.utils import format_streamlit_dataframe
+                                st.dataframe(
+                                    format_streamlit_dataframe(data.head()),
+                                    use_container_width=True,
+                                    height=400  # Фиксированная высота для лучшего отображения
+                                )
                     
                 except Exception as e:
                     st.error(f"Ошибка при чтении файла: {str(e)}")
@@ -287,8 +311,9 @@ class DataLoader:
                     
                     # Проверяем, что колонки соответствуют ожидаемым
                     expected_columns = [
-                        "Материал", "ДатаСоздан", "Цена нетто", "за", "ЕЦЗ", "Влт", 
-                        "Курс", "З-д", "ДокумЗакуп", "ГрЗ", "ГруппаМтр"
+                        # Используем объединение обязательных и рекомендуемых
+                        *self.mandatory_columns,
+                        *self.recommended_columns
                     ]
                     
                     # Если количество столбцов совпадает, но названия разные, 
@@ -304,9 +329,14 @@ class DataLoader:
             
             # Если все кодировки не подошли, выводим все ошибки
             error_message = "\n".join(errors)
-            raise Exception(f"Не удалось загрузить данные ни с одной кодировкой:\n{error_message}")
+            # Логируем подробную ошибку
+            logger.error(f"Failed to load data with any encoding: {error_message}")
+            raise Exception(f"Не удалось загрузить данные ни с одной кодировкой. Проверьте файл и настройки импорта.")
         
         except Exception as e:
+            # Логируем исключение
+            logger.error(f"Error during data loading: {e}", exc_info=True)
             from modules.utils import show_error_message
-            show_error_message(e, "Ошибка при загрузке данных", show_traceback=True)
+            show_error_message(e, "Ошибка при загрузке данных", show_traceback=False) # Отключаем traceback для пользователя
             st.info("Попробуйте изменить параметры загрузки или используйте другой файл.")
+            return None # Возвращаем None в случае ошибки
