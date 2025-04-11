@@ -231,20 +231,50 @@ elif page == "Анализ безопасности":
         if 'security_risks' not in st.session_state:
             with st.spinner("Анализ безопасности данных..."):
                 st.session_state.security_risks = security_analyzer.analyze_security_risks(
-                    st.session_state.processed_data, 
+                    st.session_state.processed_data,
                     st.session_state.materials_segments
                 )
 
         # Отображаем результаты анализа, если они есть
-        if 'security_risks' in st.session_state and st.session_state.security_risks is not None:
-            security_analyzer.display_security_analysis_results(st.session_state.security_risks)
-        
-            # Кнопка для детального анализа остается здесь, но использует сохраненные риски
-            if not st.session_state.security_risks.empty and st.button("Показать детальный анализ для материала с высоким риском"):
-                # Выбираем материал с наивысшим индексом подозрительности из СОХРАНЕННЫХ результатов
-                high_risk_material = st.session_state.security_risks.iloc[0]['Материал']
-                # Вызываем функцию детального анализа (она не создает кнопки скачивания, все в порядке)
-                security_analyzer.highlight_suspicious_materials(st.session_state.processed_data, high_risk_material)
+        if 'security_risks' in st.session_state and st.session_state.security_risks is not None and not st.session_state.security_risks.empty:
+            risk_df = st.session_state.security_risks
+            security_analyzer.display_security_analysis_results(risk_df)
+
+            st.divider()
+            st.subheader("Детальный анализ материалов с высоким риском")
+
+            high_risk_materials_df = risk_df[risk_df['Категория риска'] == 'Высокий']
+
+            if not high_risk_materials_df.empty:
+                high_risk_options = high_risk_materials_df['Материал'].tolist()
+                
+                selected_materials = st.multiselect(
+                    "Выберите материалы для детального анализа:",
+                    options=high_risk_options,
+                    default=high_risk_options[:min(5, len(high_risk_options))] # По умолчанию выбираем первые 5 или меньше
+                )
+
+                if selected_materials:
+                    # Генерируем данные для Excel
+                    excel_data = security_analyzer.export_multiple_detailed_analysis(
+                        st.session_state.processed_data, 
+                        selected_materials
+                    )
+                    
+                    if excel_data:
+                        st.download_button(
+                           label="Скачать детальный анализ для выбранных материалов (Excel)",
+                           data=excel_data,
+                           file_name="detailed_security_analysis_multiple.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                else:
+                    st.info("Выберите хотя бы один материал для загрузки детального анализа.")
+            else:
+                st.info("Материалы с высоким риском не найдены.")
+
+        elif 'security_risks' in st.session_state and st.session_state.security_risks is not None and st.session_state.security_risks.empty:
+             st.info("Анализ безопасности завершен, но материалы с признаками риска не обнаружены.")
         else:
              st.info("Результаты анализа безопасности отсутствуют или не были сгенерированы.")
 
