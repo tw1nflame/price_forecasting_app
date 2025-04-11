@@ -1,10 +1,9 @@
 /* Основные стили для приложения */
 
-/* Основные стили для приложения */
-
 /* Основной контейнер */
 .stApp {
-    max-width: 1200px;
+    /* Увеличиваем максимальную ширину и оставляем центрирование */
+    max-width: 95%; 
     margin: 0 auto;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
@@ -155,6 +154,53 @@
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     border-radius: 5px;
     overflow: hidden;
+    /* Убедимся, что графики занимают всю ширину */
+    width: 100% !important; 
+}
+
+/* Графики Plotly на всю ширину */
+.plotly,
+.plot-container,
+div.stPlotlyChart > div {
+    width: 100% !important;
+}
+
+/* Таблицы Dataframe на всю ширину */
+.dataframe,
+div.stDataFrame > div {
+   width: 100% !important;
+   /* Добавим немного отступа, чтобы не прилипало к краям */
+   margin-bottom: 1rem; 
+}
+
+/* Стили для таблиц Pandas DataFrame */
+/* (Эти стили были перенесены из utils.py для централизации) */
+.dataframe {
+    border-collapse: collapse !important;
+}
+
+.dataframe th {
+    background-color: #E3F2FD !important;
+    color: #0D47A1 !important;
+    font-weight: bold !important;
+    border: 1px solid #B0BEC5 !important;
+    padding: 8px !important;
+    text-align: left !important;
+    white-space: nowrap; /* Предотвращение переноса заголовков */
+}
+
+.dataframe td {
+    border: 1px solid #E0E0E0 !important;
+    padding: 8px !important;
+    text-align: left !important;
+}
+
+.dataframe tr:nth-child(even) {
+    background-color: #F5F5F5 !important;
+}
+
+.dataframe tr:hover {
+    background-color: #E3F2FD !important;
 }
 
 /* Разделители */
@@ -270,6 +316,7 @@ hr {
 @media screen and (max-width: 768px) {
     .stApp {
         padding: 10px;
+        max-width: 100%; /* На мобильных устройствах занимаем всю ширину */
     }
     
     [data-testid="stMetricValue"] {
@@ -279,4 +326,44 @@ hr {
     .js-plotly-plot {
         height: auto !important;
     }
+}
+
+/* Дополнительные стили, перенесенные из utils.py */
+
+/* Красивые кнопки скачивания */
+div.stDownloadButton > button {
+    background-color: #1E88E5 !important;
+    color: white !important;
+    border-radius: 4px !important;
+    padding: 0.5rem 1rem !important;
+    font-weight: bold !important;
+    border: none !important;
+    transition: background-color 0.3s !important;
+}
+
+div.stDownloadButton > button:hover {
+    background-color: #1565C0 !important;
+}
+
+/* Улучшение заголовков секций в Markdown */
+div.stMarkdown h1, div.stMarkdown h2, div.stMarkdown h3 {
+    color: #0D47A1 !important;
+    border-bottom: 1px solid #B0BEC5;
+    padding-bottom: 0.3rem;
+}
+
+/* Улучшение виджетов Selectbox */
+div.stSelectbox > div[data-baseweb="select"] > div {
+    background-color: white !important;
+    border-radius: 4px !important;
+    border-color: #B0BEC5 !important;
+}
+
+div.stSelectbox > div[data-baseweb="select"] > div:hover {
+    border-color: #1E88E5 !important;
+}
+
+/* Фикс фона для содержимого боковой панели */
+section[data-testid="stSidebar"] > div {
+    background-color: #F5F5F5 !important;
 }

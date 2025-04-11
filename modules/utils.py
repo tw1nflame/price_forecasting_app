@@ -5,217 +5,34 @@ import base64
 from io import BytesIO
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
+import os
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def apply_custom_css():
     """
-    Применяет пользовательские CSS-стили к приложению
+    Применяет пользовательские CSS-стили из файла static/styles.css к приложению Streamlit.
     """
-    # Проверяем наличие файла CSS
-    import os
+    # Определяем путь к файлу CSS относительно текущего файла
     css_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static', 'styles.css')
-    
-    # Если файл существует, загружаем его содержимое
+
+    # Проверяем наличие файла CSS
     if os.path.exists(css_path):
-        with open(css_path, 'r', encoding='utf-8') as f:
-            css = f.read()
+        try:
+            with open(css_path, 'r', encoding='utf-8') as f:
+                css = f.read()
+            st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
+            logger.info("Custom CSS applied successfully from %s", css_path)
+        except Exception as e:
+            logger.error("Error reading or applying CSS file %s: %s", css_path, e)
+            st.error(f"Не удалось загрузить стили оформления: {e}")
     else:
-        # Если файл не найден, используем встроенные стили
-        css = """
-        /* Основные стили */
-        .stApp {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        /* Заголовки */
-        .main .block-container h1, .main .block-container h2 {
-            color: #1E88E5;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #e0e0e0;
-            margin-bottom: 20px;
-        }
-        
-        .main .block-container h3, .main .block-container h4 {
-            color: #0D47A1;
-            margin-top: 20px;
-            margin-bottom: 10px;
-        }
-        
-        /* Метрики */
-        [data-testid="stMetricValue"] {
-            font-size: 2rem !important;
-            font-weight: bold;
-        }
-        
-        /* Боковая панель */
-        [data-testid="stSidebar"] {
-            background-color: #f5f5f5;
-            padding: 1rem;
-        }
-        
-        [data-testid="stSidebar"] h2 {
-            color: #1E88E5;
-            border-bottom: 1px solid #e0e0e0;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-        
-        /* Информационные блоки */
-        .stAlert {
-            border-radius: 5px;
-        }
-        
-        /* Кнопки */
-        .stButton button {
-            width: 100%;
-        }
-        
-        /* Таблицы */
-        [data-testid="stTable"] {
-            width: 100%;
-        }
-        
-        /* Графики */
-        .js-plotly-plot {
-            margin-bottom: 20px;
-        }
-        
-        /* Графики Plotly на всю ширину */
-        .js-plotly-plot, .plotly, .plot-container {
-            width: 100% !important;
-        }
-        
-        /* Разделители */
-        hr {
-            margin: 30px 0;
-        }
-        
-        /* Подсказки */
-        .tooltip {
-            position: relative;
-            display: inline-block;
-            border-bottom: 1px dotted black;
-        }
-        
-        .tooltip .tooltiptext {
-            visibility: hidden;
-            width: 200px;
-            background-color: #f0f0f0;
-            color: #333;
-            text-align: center;
-            border-radius: 6px;
-            padding: 5px;
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
-            left: 50%;
-            margin-left: -100px;
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        
-        .tooltip:hover .tooltiptext {
-            visibility: visible;
-            opacity: 1;
-        }
-        
-        /* Стили для таблиц */
-        .dataframe {
-            width: 100%;
-            border-collapse: collapse !important;
-        }
-        
-        .dataframe th {
-            background-color: #E3F2FD !important;
-            color: #0D47A1 !important;
-            font-weight: bold !important;
-            border: 1px solid #B0BEC5 !important;
-            padding: 8px !important;
-            text-align: left !important;
-        }
-        
-        .dataframe td {
-            border: 1px solid #E0E0E0 !important;
-            padding: 8px !important;
-            text-align: left !important;
-        }
-        
-        .dataframe tr:nth-child(even) {
-            background-color: #F5F5F5 !important;
-        }
-        
-        .dataframe tr:hover {
-            background-color: #E3F2FD !important;
-        }
-        
-        /* Фиксированная ширина для контейнеров графиков */
-        [data-testid="stContainer"] {
-            width: 100% !important;
-            max-width: 100% !important;
-        }
-        """
-    
-    # Добавляем дополнительные стили для улучшения отображения таблиц и графиков
-    additional_css = """
-    /* Улучшение для графиков */
-    div.stPlotlyChart > div {
-        width: 100% !important;
-    }
-    
-    /* Улучшение для таблиц */
-    div.stDataFrame > div {
-        width: 100% !important;
-    }
-    
-    /* Красивые кнопки скачивания */
-    div.stDownloadButton > button {
-        background-color: #1E88E5 !important;
-        color: white !important;
-        border-radius: 4px !important;
-        padding: 0.5rem 1rem !important;
-        font-weight: bold !important;
-        border: none !important;
-        transition: background-color 0.3s !important;
-    }
-    
-    div.stDownloadButton > button:hover {
-        background-color: #1565C0 !important;
-    }
-    
-    /* Улучшение заголовков секций */
-    div.stMarkdown h1, div.stMarkdown h2, div.stMarkdown h3 {
-        color: #0D47A1 !important;
-        border-bottom: 1px solid #B0BEC5;
-        padding-bottom: 0.3rem;
-    }
-    
-    /* Улучшение виджетов выбора */
-    div.stSelectbox > div[data-baseweb="select"] > div {
-        background-color: white !important;
-        border-radius: 4px !important;
-        border-color: #B0BEC5 !important;
-    }
-    
-    div.stSelectbox > div[data-baseweb="select"] > div:hover {
-        border-color: #1E88E5 !important;
-    }
-    
-    /* Улучшение для слайдеров */
-    div.stSlider > div > div > div {
-        background-color: #1E88E5 !important;
-    }
-    
-    /* Фиксы для контейнеров */
-    section[data-testid="stSidebar"] > div {
-        background-color: #F5F5F5 !important;
-    }
-    """
-    
-    # Объединяем стили
-    css += additional_css
-    
-    # Применяем стили
-    st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
+        # Если файл не найден, выводим предупреждение
+        logger.warning("CSS file not found at %s. Using default Streamlit styles.", css_path)
+        st.warning("Файл стилей styles.css не найден. Используются стандартные стили.")
 
 def format_number(number, precision=2):
     """
