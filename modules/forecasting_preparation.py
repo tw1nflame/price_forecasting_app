@@ -177,15 +177,6 @@ class ForecastPreparation:
             )
             naive_forecasting_materials = material_metrics[naive_forecasting_mask]['Материал'].tolist()
             
-            # Добавляем материалы с высокой волатильностью к наивным методам, если достаточно данных
-            naive_high_volatility_mask = (
-                high_volatility_mask & 
-                (material_metrics['record_count'] >= 5)
-            )
-            naive_forecasting_materials.extend(
-                material_metrics[naive_high_volatility_mask]['Материал'].tolist()
-            )
-            
             progress_bar.progress(0.7)
             status_text.text("Создаем DataFrame для каждого сегмента...")
             
@@ -210,8 +201,7 @@ class ForecastPreparation:
                 material_to_segment[material] = 'Недостаточно истории'
                 
             for material in high_volatility_materials:
-                if material not in naive_forecasting_materials:
-                    material_to_segment[material] = 'Высокая волатильность'
+                material_to_segment[material] = 'Высокая волатильность'
             
             # Получаем уникальный набор материалов с метриками
             unique_materials_data = material_metrics.copy()
@@ -257,7 +247,7 @@ class ForecastPreparation:
                 'Постоянная цена': len(constant_price_materials),
                 'Неактивные': len(inactive_materials),
                 'Недостаточно истории': len(insufficient_history_materials),
-                'Высокая волатильность': len([m for m in high_volatility_materials if m not in naive_forecasting_materials])
+                'Высокая волатильность': len(high_volatility_materials)
             }
             
             progress_bar.progress(1.0)
