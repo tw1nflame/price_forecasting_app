@@ -3,6 +3,9 @@ import pandas as pd
 import os
 import sys
 
+# Увеличиваем лимит элементов для отображения в Pandas Styler
+pd.set_option("styler.render.max_elements", 1000000)  # Устанавливаем лимит в 1 миллион элементов
+
 # Добавляем путь к модулям
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -14,7 +17,7 @@ from modules.visualization import Visualizer
 from modules.material_segmentation import MaterialSegmenter
 from modules.forecasting_preparation import ForecastPreparation
 from modules.security_analyzer import SecurityAnalyzer
-from modules.utils import apply_custom_css
+from modules.utils import apply_custom_css, show_user_guide, show_performance_info, show_app_version
 
 # Настройка страницы
 st.set_page_config(
@@ -78,6 +81,11 @@ def display_info():
     Загрузите CSV-файл с данными о материалах, и приложение выполнит анализ, 
     определит материалы, подходящие для прогнозирования, и подготовит данные для дальнейшего использования.
     """)
+    
+    # Добавляем руководство пользователя
+    with st.expander("Руководство пользователя", expanded=False):
+        show_user_guide()
+        
     # Добавляем информацию для служб безопасности
     with st.expander("Информация для служб безопасности"):
         st.markdown("""
@@ -123,6 +131,7 @@ def display_info():
         
         **Примечание:** Особое внимание следует уделить материалам из сегмента "Высокая волатильность", так как в этом сегменте наиболее часто обнаруживаются признаки потенциальных нарушений.
         """)
+
 # Основное содержимое
 if page == "Информация":
     display_info()
@@ -265,4 +274,11 @@ elif page == "Экспорт данных":
 
 # Footer
 st.divider()
+
+# Отображение информации о производительности
+show_performance_info()
+
+# Отображение информации о версии
+show_app_version()
+
 st.caption("© 2025 Анализ и прогнозирование цен материалов")

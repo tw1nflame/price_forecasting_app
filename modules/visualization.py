@@ -577,15 +577,66 @@ class Visualizer:
         else:
             display_data = segments[segment_selection]
         
-        # Показываем таблицу с данными выбранного сегмента
+        # Показываем таблицу с данными выбранного сегмента с пагинацией
         st.write(f"Данные сегмента: {segment_selection}")
-        st.dataframe(
-            create_styled_dataframe(
-                display_data,
-                precision=2
-            ),
-            use_container_width=True
-        )
+        
+        # Проверка на размер данных и добавление пагинации при необходимости
+        row_count = len(display_data)
+        
+        if row_count > 1000:
+            st.info(f"Найдено {row_count} строк данных. Отображение с пагинацией.")
+            
+            # Добавляем пагинацию
+            page_size = st.slider("Количество строк на странице:", 
+                                min_value=50, 
+                                max_value=500, 
+                                value=100, 
+                                step=50)
+            
+            page_number = st.number_input("Страница:", 
+                                        min_value=1, 
+                                        max_value=max(1, row_count // page_size + 1), 
+                                        value=1)
+            
+            # Вычисляем индексы для текущей страницы
+            start_idx = (page_number - 1) * page_size
+            end_idx = min(start_idx + page_size, row_count)
+            
+            # Отображаем данные для текущей страницы
+            paged_data = display_data.iloc[start_idx:end_idx].copy()
+            
+            st.write(f"Отображение строк {start_idx+1}-{end_idx} из {row_count}")
+            
+            st.dataframe(
+                create_styled_dataframe(
+                    paged_data,
+                    precision=2
+                ),
+                use_container_width=True
+            )
+            
+            # Добавляем возможность экспорта всех данных
+            if st.button(f"Скачать все {row_count} строк в формате CSV"):
+                st.session_state['temp_download_data'] = display_data
+                st.success("Данные готовы к загрузке")
+                
+                # Создаем временный CSV файл для скачивания
+                csv = display_data.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Скачать CSV",
+                    data=csv,
+                    file_name=f"segment_{segment_selection.replace(' ', '_')}.csv",
+                    mime="text/csv",
+                    key='download_segment_data'
+                )
+        else:
+            st.dataframe(
+                create_styled_dataframe(
+                    display_data,
+                    precision=2
+                ),
+                use_container_width=True
+            )
         
         # Визуализация характеристик сегментов
         if not all_segments.empty:
