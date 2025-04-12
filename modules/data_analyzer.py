@@ -81,18 +81,54 @@ class DataAnalyzer:
         if "Влт" in data.columns:
             st.subheader("Распределение по валютам")
             
-            currency_count = data.groupby("Влт")["Материал"].count().reset_index()
-            currency_count.columns = ["Валюта", "Количество записей"]
-            currency_count = currency_count.sort_values("Количество записей", ascending=False)
+            # Улучшенная обработка валют для графика
+            total_records = len(data)
+            currency_counts = data["Влт"].value_counts()
+            currency_perc = (currency_counts / total_records) * 100
             
+            # Определяем порог для группировки (например, 0.5%)
+            threshold = 0.5
+            small_currencies = currency_perc[currency_perc < threshold]
+            main_currencies = currency_perc[currency_perc >= threshold]
+            
+            # Создаем данные для графика
+            plot_data_list = []
+            # Добавляем основные валюты
+            for currency, count in currency_counts[main_currencies.index].items():
+                plot_data_list.append({"Валюта": currency, "Количество записей": count})
+                
+            # Добавляем 'Прочее', если есть мелкие валюты
+            if not small_currencies.empty:
+                other_count = currency_counts[small_currencies.index].sum()
+                plot_data_list.append({"Валюта": "Прочее", "Количество записей": other_count})
+                
+            plot_df = pd.DataFrame(plot_data_list)
+            plot_df = plot_df.sort_values("Количество записей", ascending=False)
+
             fig = px.pie(
-                currency_count, 
+                plot_df, 
                 names="Валюта", 
                 values="Количество записей",
-                title="Распределение записей по валютам"
+                title="Распределение записей по валютам (мелкие < {threshold}% сгруппированы)".format(threshold=threshold),
+                hole=0.3 # Делаем "бублик" для лучшей читаемости
             )
-            fig.update_traces(textinfo='percent+label')
-            fig.update_layout(height=400)
+            # Улучшаем отображение текста
+            fig.update_traces(
+                textposition='inside', 
+                textinfo='percent+label', 
+                insidetextorientation='radial' # Попробуем радиальное расположение
+            )
+            fig.update_layout(
+                height=450, # Немного увеличим высоту
+                showlegend=True, # Показываем легенду
+                legend=dict(
+                    orientation="h", # Горизонтальная легенда
+                    yanchor="bottom",
+                    y=-0.2, # Размещаем под графиком
+                    xanchor="center",
+                    x=0.5
+                )
+            )
             
             st.plotly_chart(fig, use_container_width=True)
             st.markdown(get_general_explanation("pie_currency"))
