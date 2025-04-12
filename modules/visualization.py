@@ -38,13 +38,18 @@ class Visualizer:
                  x='Материал',
                  y='Количество записей',
                  text='Количество записей',
-                 title='Топ-20 материалов по количеству записей'
+                 title='Топ-20 материалов по количеству записей',
+                 hover_data={
+                     'Материал': True,
+                     'Количество записей': ':,',
+                 }
              )
              fig_top_mat.update_traces(texttemplate='%{text:,}', textposition='outside')
              fig_top_mat.update_layout(
                  xaxis_tickangle=-45,
                  height=500,
                  margin=dict(l=20, r=20, t=40, b=20),
+                 yaxis_tickformat=',',
                  autosize=True
              )
 
@@ -286,9 +291,14 @@ class Visualizer:
                  x='Материал',
                  y='Коэффициент вариации',
                  text='Коэффициент вариации',
-                 title='Топ-20 материалов с наибольшей волатильностью цен (%)'
+                 title='Топ-20 материалов с наибольшей волатильностью цен (%)',
+                 hover_data={
+                     'Материал': True,
+                     'Коэффициент вариации': ':.2f%',
+                     'Средняя цена': ':.2f',
+                     'Количество записей': True
+                 }
              )
-             # Отображаем как проценты
              fig_top_vol.update_traces(texttemplate='%{text:.1f}', textposition='outside')
              fig_top_vol.update_layout(
                  xaxis_tickangle=-45,
@@ -313,7 +323,13 @@ class Visualizer:
                  x='Материал',
                  y='Коэффициент вариации',
                  text='Коэффициент вариации',
-                 title='Топ-20 материалов с наименьшей ненулевой волатильностью цен (%)'
+                 title='Топ-20 материалов с наименьшей ненулевой волатильностью цен (%)',
+                 hover_data={
+                     'Материал': True,
+                     'Коэффициент вариации': ':.2f%',
+                     'Средняя цена': ':.2f',
+                     'Количество записей': True
+                 }
              )
              fig_bot_vol.update_traces(texttemplate='%{text:.1f}', textposition='outside')
              fig_bot_vol.update_layout(
@@ -321,6 +337,7 @@ class Visualizer:
                  height=500,
                  margin=dict(l=20, r=20, t=40, b=20),
                  yaxis_title="Коэффициент вариации, %",
+                 yaxis_tickformat='.2f',
                  autosize=True
              )
 
@@ -627,7 +644,11 @@ class Visualizer:
                 x='Материал',
                 y='Дней с последней активности',
                 text='Дней с последней активности',
-                title='Топ-20 материалов по длительности неактивности'
+                title='Топ-20 материалов по длительности неактивности',
+                hover_data={
+                    'Материал': True,
+                    'Дней с последней активности': ':,.0f' # Целое число с разделителем тысяч
+                }
             )
             fig_top_inact.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
             fig_top_inact.update_layout(
@@ -635,6 +656,7 @@ class Visualizer:
                 height=500,
                 margin=dict(l=20, r=20, t=40, b=20),
                 yaxis_title="Дней с последней активности",
+                yaxis_tickformat=',', # Формат оси Y с разделителем тысяч
                 autosize=True
             )
 
