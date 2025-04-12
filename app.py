@@ -248,6 +248,13 @@ elif page == "Сегментация для прогнозирования":
         st.warning("Сначала загрузите и обработайте данные")
 elif page == "Анализ безопасности":
     if 'processed_data' in st.session_state and 'materials_segments' in st.session_state:
+
+        # Кнопка для повторного запуска анализа
+        if st.button("Повторить анализ"):
+            if 'security_risks' in st.session_state:
+                del st.session_state['security_risks']
+            st.rerun()
+
         # Запускаем анализ ТОЛЬКО если результаты еще не сохранены в сессии
         if 'security_risks' not in st.session_state:
             with st.spinner("Анализ безопасности данных..."):
@@ -306,7 +313,7 @@ elif page == "Анализ безопасности":
         
         if st.button("Перейти к сегментации"):
             st.session_state.page = "Сегментация для прогнозирования"
-            st.experimental_rerun()
+            st.rerun()
     
 elif page == "Экспорт данных":
     if 'materials_segments' in st.session_state:
@@ -332,7 +339,7 @@ elif page == "Экспорт данных":
         if st.button("Перейти к сегментации"):
             # Переключаемся на страницу сегментации
             st.session_state.page = "Сегментация для прогнозирования"
-            st.experimental_rerun()
+            st.rerun()
 
 # Footer
 st.divider()
