@@ -176,22 +176,49 @@ elif page == "Временной анализ":
 
 elif page == "Анализ волатильности":
     if 'processed_data' in st.session_state:
-        material_segmenter.analyze_volatility(st.session_state.processed_data)
-        visualizer.plot_volatility(st.session_state.volatility_data)
+        # Проверяем, есть ли уже данные анализа волатильности
+        if 'volatility_data' not in st.session_state:
+            with st.spinner("Анализ волатильности..."):
+                # Предполагаем, что эта функция сохраняет результат в st.session_state.volatility_data
+                material_segmenter.analyze_volatility(st.session_state.processed_data)
+
+        # Отображаем, если данные есть (были или только что рассчитаны)
+        if 'volatility_data' in st.session_state:
+            visualizer.plot_volatility(st.session_state.volatility_data)
+        else:
+            st.error("Не удалось выполнить или загрузить данные анализа волатильности.")
     else:
         st.warning("Сначала загрузите и обработайте данные")
 
 elif page == "Стабильные материалы":
     if 'processed_data' in st.session_state:
-        material_segmenter.analyze_stability(st.session_state.processed_data)
-        visualizer.plot_stability(st.session_state.stability_data)
+        # Проверяем, есть ли уже данные анализа стабильности
+        if 'stability_data' not in st.session_state:
+            with st.spinner("Анализ стабильности материалов..."):
+                 # Предполагаем, что эта функция сохраняет результат в st.session_state.stability_data
+                material_segmenter.analyze_stability(st.session_state.processed_data)
+
+        # Отображаем, если данные есть
+        if 'stability_data' in st.session_state:
+            visualizer.plot_stability(st.session_state.stability_data)
+        else:
+            st.error("Не удалось выполнить или загрузить данные анализа стабильности.")
     else:
         st.warning("Сначала загрузите и обработайте данные")
 
 elif page == "Неактивные материалы":
     if 'processed_data' in st.session_state:
-        material_segmenter.analyze_inactivity(st.session_state.processed_data)
-        visualizer.plot_inactivity(st.session_state.inactivity_data)
+         # Проверяем, есть ли уже данные анализа неактивности
+        if 'inactivity_data' not in st.session_state:
+            with st.spinner("Анализ неактивных материалов..."):
+                 # Предполагаем, что эта функция сохраняет результат в st.session_state.inactivity_data
+                material_segmenter.analyze_inactivity(st.session_state.processed_data)
+
+        # Отображаем, если данные есть
+        if 'inactivity_data' in st.session_state:
+            visualizer.plot_inactivity(st.session_state.inactivity_data)
+        else:
+             st.error("Не удалось выполнить или загрузить данные анализа неактивности.")
     else:
         st.warning("Сначала загрузите и обработайте данные")
 
