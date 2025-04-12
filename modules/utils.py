@@ -350,13 +350,29 @@ def apply_custom_css():
 
 def format_number(number, precision=2):
     """
-    Форматирует число с разделителями тысяч и указанной точностью
+    Форматирует число с разделителями тысяч и указанной точностью.
+    Обрабатывает NaN и бесконечные значения.
     """
-    if isinstance(number, (int, float)):
-        if number == int(number):
-            return f"{int(number):,}".replace(",", " ")
-        else:
-            return f"{number:,.{precision}f}".replace(",", " ")
+    # Проверяем на NaN и бесконечность с помощью numpy
+    if not np.isfinite(number):
+        # Для NaN возвращаем прочерк, для inf оставляем как есть
+        return "-" if pd.isna(number) else str(number)
+
+    if isinstance(number, (int, float, np.number)): # Добавляем np.number для совместимости
+        try:
+            # Проверяем, является ли число целым
+            # Используем np.isclose для сравнения float с int
+            if np.isclose(number, round(number)):
+                # Форматируем как целое
+                return f"{int(round(number)):,}".replace(",", " ")
+            else:
+                # Форматируем как float с указанной точностью
+                return f"{number:,.{precision}f}".replace(",", " ").replace(".", ",")
+        except (ValueError, OverflowError):
+            # В случае ошибки форматируем как строку
+            return str(number)
+
+    # Возвращаем как строку, если это не число
     return str(number)
 
 def get_download_link(df, filename, text):
