@@ -220,14 +220,30 @@ elif page == "Сегментация для прогнозирования":
                     max_volatility=max_volatility,
                     min_activity_days=min_activity_days
                 )
-                
+
                 st.session_state.materials_segments = segments
                 st.session_state.segments_stats = stats
-                
+
                 st.success("Сегментация завершена!")
-                
-                # Визуализация результатов сегментации
-                visualizer.plot_segmentation_results(segments, stats)
+
+                # Очищаем состояние виджетов визуализации при новой сегментации
+                keys_to_clear = ['vis_seg_details_select', 'vis_seg_page_size', 'vis_seg_page_number']
+                for key in keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                # Визуализацию вызываем ниже, после проверки наличия данных в сессии
+
+        # Отображение результатов, если они есть в сессии
+        if 'materials_segments' in st.session_state and 'segments_stats' in st.session_state:
+             # Используем данные из session_state
+             visualizer.plot_segmentation_results(
+                 st.session_state.materials_segments,
+                 st.session_state.segments_stats
+             )
+        # Сообщение, если сегментация еще не проводилась (но данные загружены)
+        elif 'materials_segments' not in st.session_state:
+             st.info("Задайте параметры и нажмите 'Выполнить сегментацию' для просмотра результатов.")
+
     else:
         st.warning("Сначала загрузите и обработайте данные")
 elif page == "Анализ безопасности":

@@ -747,7 +747,7 @@ class Visualizer:
         segment_selection = st.selectbox(
             "Выберите сегмент для просмотра:",
             ['Все сегменты'] + available_segments,
-             key="segment_details_select"
+             key="vis_seg_details_select"
         )
 
         if segment_selection == 'Все сегменты':
@@ -773,14 +773,14 @@ class Visualizer:
                                     max_value=500,
                                     value=100,
                                     step=50,
-                                     key="segment_page_size")
+                                     key="vis_seg_page_size")
 
                 total_pages = max(1, (row_count + page_size - 1) // page_size)
                 page_number = st.number_input("Страница:",
                                             min_value=1,
                                             max_value=total_pages,
                                             value=1,
-                                             key="segment_page_number")
+                                             key="vis_seg_page_number")
 
                 # Вычисляем индексы для текущей страницы
                 start_idx = (page_number - 1) * page_size
@@ -809,7 +809,7 @@ class Visualizer:
                     data=csv_data, # Используем данные из буфера
                     file_name=f"segment_{segment_selection.replace(' ', '_')}_all.csv",
                     mime="text/csv; charset=utf-8-sig", # Указываем кодировку в mime-типе
-                    key='download_segment_all_data'
+                    key='vis_seg_download_all_data'
                 )
             else:
                 st.dataframe(
