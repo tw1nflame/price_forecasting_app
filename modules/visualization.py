@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from modules.utils import create_styled_dataframe, get_general_explanation
+import io
 
 class Visualizer:
     """
@@ -799,12 +800,15 @@ class Visualizer:
                 )
 
                 # Добавляем возможность экспорта всех данных
-                csv = display_data.to_csv(index=False).encode('utf-8')
+                # Используем BytesIO и кодировку utf-8-sig для корректного отображения в Excel
+                csv_buffer = io.BytesIO()
+                display_data.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+                csv_data = csv_buffer.getvalue()
                 st.download_button(
                     label=f"Скачать все {row_count:,} строк в CSV".replace(",", " "),
-                    data=csv,
+                    data=csv_data, # Используем данные из буфера
                     file_name=f"segment_{segment_selection.replace(' ', '_')}_all.csv",
-                    mime="text/csv",
+                    mime="text/csv; charset=utf-8-sig", # Указываем кодировку в mime-типе
                     key='download_segment_all_data'
                 )
             else:
