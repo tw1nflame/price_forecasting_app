@@ -24,15 +24,15 @@ class MaterialSegmenter:
         *   **Высокий CV (> 30-50%):** Цена сильно изменяется, что может указывать на рыночные факторы, ошибки в данных или разные условия закупок.
         """)
 
-        if 'Материал' not in data.columns or 'Цена нетто' not in data.columns:
-            st.error("Отсутствуют необходимые колонки: 'Материал', 'Цена нетто'.")
+        if 'Материал' not in data.columns or 'Цена нетто (норм.)' not in data.columns:
+            st.error("Отсутствуют необходимые колонки: 'Материал', 'Цена нетто (норм.)'.")
             return
-        if not pd.api.types.is_numeric_dtype(data['Цена нетто']):
-             st.error("Колонка 'Цена нетто' не является числовой.")
+        if not pd.api.types.is_numeric_dtype(data['Цена нетто (норм.)']):
+             st.error("Колонка 'Цена нетто (норм.)' не является числовой.")
              return
 
         # Рассчитываем волатильность (коэффициент вариации)
-        volatility = data.groupby('Материал')['Цена нетто'].agg(
+        volatility = data.groupby('Материал')['Цена нетто (норм.)'].agg(
             ['count', 'mean', 'std']
         ).reset_index()
         
@@ -56,8 +56,9 @@ class MaterialSegmenter:
         # Add general explanation for the volatility table
         st.markdown(get_general_explanation("table_volatility"))
 
-        # Сохраняем результат в сессию для визуализации
-        st.session_state.volatility_data = volatility
+        # Сохраняем результат в сессию для визуализации (записываем лишь если ключ отсутствует)
+        if 'volatility_data' not in st.session_state:
+            st.session_state.volatility_data = volatility
 
     def analyze_stability(self, data):
         """
@@ -70,8 +71,8 @@ class MaterialSegmenter:
         Высокий процент (например, > 80-90%) указывает на очень стабильную или даже фиксированную цену.
         """)
 
-        if 'Материал' not in data.columns or 'Цена нетто' not in data.columns:
-            st.error("Отсутствуют необходимые колонки: 'Материал', 'Цена нетто'.")
+        if 'Материал' not in data.columns or 'Цена нетто (норм.)' not in data.columns:
+            st.error("Отсутствуют необходимые колонки: 'Материал', 'Цена нетто (норм.)'.")
             return
 
         # Функция для расчета процента наиболее частого значения
@@ -83,7 +84,7 @@ class MaterialSegmenter:
             return (most_frequent_count / len(series)) * 100
 
         # Расчет стабильности
-        stability = data.groupby('Материал')['Цена нетто'].agg(
+        stability = data.groupby('Материал')['Цена нетто (норм.)'].agg(
             ['count', most_frequent_pct]
         ).reset_index()
         
@@ -102,8 +103,9 @@ class MaterialSegmenter:
         # Add general explanation for the stability table
         st.markdown(get_general_explanation("table_stability"))
 
-        # Сохраняем результат в сессию для визуализации
-        st.session_state.stability_data = stability
+        # Сохраняем результат в сессию для визуализации (записываем лишь если ключ отсутствует)
+        if 'stability_data' not in st.session_state:
+            st.session_state.stability_data = stability
 
     def analyze_inactivity(self, data):
         """
@@ -154,8 +156,9 @@ class MaterialSegmenter:
         # Add general explanation for the inactivity table based on the threshold
         st.markdown(get_general_explanation("table_inactivity", threshold=inactivity_threshold))
 
-        # Сохраняем результат в сессию для визуализации
-        st.session_state.inactivity_data = last_activity
+        # Сохраняем результат в сессии для визуализации (записываем лишь если ключ отсутствует)
+        if 'inactivity_data' not in st.session_state:
+            st.session_state.inactivity_data = last_activity
 
     def segment_materials_for_forecast(self, data, min_data_points=24, max_volatility=30, min_activity_days=365, inactivity_threshold=365):
         """
@@ -171,11 +174,11 @@ class MaterialSegmenter:
         Returns:
             tuple: (dict of DataFrames per segment, dict of segment stats)
         """
-        if 'Материал' not in data.columns or 'ДатаСоздан' not in data.columns or 'Цена нетто' not in data.columns:
+        if 'Материал' not in data.columns or 'ДатаСоздан' not in data.columns or 'Цена нетто (норм.)' not in data.columns:
             st.error("Отсутствуют необходимые колонки для сегментации.")
             return {}, {}
-        if not pd.api.types.is_datetime64_any_dtype(data['ДатаСоздан']) or not pd.api.types.is_numeric_dtype(data['Цена нетто']):
-             st.error("Колонки 'ДатаСоздан' или 'Цена нетто' имеют неверный формат.")
+        if not pd.api.types.is_datetime64_any_dtype(data['ДатаСоздан']) or not pd.api.types.is_numeric_dtype(data['Цена нетто (норм.)']):
+             st.error("Колонки 'ДатаСоздан' или 'Цена нетто (норм.)' имеют неверный формат.")
              return {}, {}
 
         # 1. Расчет характеристик для каждого материала
@@ -183,8 +186,8 @@ class MaterialSegmenter:
             count=('ДатаСоздан', 'count'),
             first_date=('ДатаСоздан', 'min'),
             last_date=('ДатаСоздан', 'max'),
-            mean_price=('Цена нетто', 'mean'),
-            std_price=('Цена нетто', 'std')
+            mean_price=('Цена нетто (норм.)', 'mean'),
+            std_price=('Цена нетто (норм.)', 'std')
         ).reset_index()
 
         # 2. Временной диапазон
@@ -278,4 +281,4 @@ class MaterialSegmenter:
             else:
                  export_segments[segment] = pd.DataFrame() # Оставляем пустым, если нет данных
 
-        return export_segments, stats 
+        return export_segments, stats

@@ -5,391 +5,192 @@ from datetime import datetime
 
 class MaterialSegmenter:
     """
-    Класс для сегментации материалов на основе различных критериев
+    Класс для сегментации временных рядов на основе различных критериев.
+    Строит метрики волатильности, стабильности и неактивности.
+    Требует передачи role-based имён колонок через role_names и работает
+    только с каноническими role-именами (не использует legacy fallback).
     """
-    
-    def __init__(self):
-        pass
-    
-    def analyze_volatility(self, data):
-        """
-        Анализирует волатильность цен материалов
-        """
-        st.header("Анализ волатильности цен материалов")
-        
-        st.write("""
-        Волатильность цен показывает, насколько сильно изменяются цены материала 
-        со временем. Высокая волатильность может затруднить прогнозирование цен.
-        """)
-        
-        # Вычисляем волатильность для каждого материала
-        volatility_data = self._calculate_volatility(data)
-        
-        # Сохраняем результаты анализа в session_state
-        st.session_state.volatility_data = volatility_data
-        
-        # Отображаем результаты
-        st.subheader("Результаты анализа волатильности")
-        
-        # Статистика по коэффициентам вариации
+
+    def __init__(self, role_names=None):
+        self.role_names = role_names or {
+            'ROLE_ID': 'ID',
+            'ROLE_DATE': 'Дата',
+            'ROLE_TARGET': 'Целевая Колонка',
+            'ROLE_QTY': 'Количество',
+            'ROLE_CURRENCY': 'Валюта',
+            'ROLE_RATE': 'Курс'
+        }
+        self.ROLE_ID = self.role_names.get('ROLE_ID')
+        self.ROLE_DATE = self.role_names.get('ROLE_DATE')
+        self.ROLE_TARGET = self.role_names.get('ROLE_TARGET')
+
+    # --- Helpers to resolve columns ---
+    def _resolve_material_col(self, df: pd.DataFrame):
+        # Only accept the canonical ROLE_ID
+        return self.ROLE_ID if self.ROLE_ID in df.columns else None
+
+    def _resolve_date_col(self, df: pd.DataFrame):
+        # Only accept the canonical ROLE_DATE
+        return self.ROLE_DATE if self.ROLE_DATE in df.columns else None
+
+    def _resolve_price_col(self, df: pd.DataFrame):
+        # prefer role-based normalized target column
+        norm_col = f"{self.ROLE_TARGET} (норм.)"
+        # Only accept role-based normalized price or role target
+        if norm_col in df.columns:
+            return norm_col
+        if self.ROLE_TARGET in df.columns:
+            return self.ROLE_TARGET
+        return None
+
+    # --- Public analysis entry points ---
+    def analyze_volatility(self, data: pd.DataFrame):
+        st.header("Анализ волатильности целевых значений")
+        st.write("Вычисление коэффициента вариации (CV) для каждого временного ряда.")
+
+        volatility_df = self._calculate_volatility(data)
+
+        # save to session
+        st.session_state['volatility_data'] = volatility_df
+
+        # show summary metrics
         col1, col2, col3 = st.columns(3)
-        
         with col1:
-            st.metric(
-                "Средняя волатильность", 
-                f"{volatility_data['Коэффициент вариации'].mean():.2f}%"
-            )
-        
+            st.metric("Средняя волатильность", f"{volatility_df['Коэффициент вариации'].mean():.2f}%")
         with col2:
-            st.metric(
-                "Медианная волатильность", 
-                f"{volatility_data['Коэффициент вариации'].median():.2f}%"
-            )
-        
+            st.metric("Медианная волатильность", f"{volatility_df['Коэффициент вариации'].median():.2f}%")
         with col3:
-            # Процент материалов с низкой волатильностью (менее 10%)
-            low_volatility = (volatility_data['Коэффициент вариации'] < 10).sum()
-            low_volatility_percent = (low_volatility / len(volatility_data)) * 100
-            
-            st.metric(
-                "Материалы с низкой волатильностью", 
-                f"{low_volatility_percent:.1f}%"
-            )
-        
-        # Поиск материала по коду
-        search_material = st.text_input("Поиск материала по коду (для анализа волатильности):")
-        
-        if search_material:
-            filtered_materials = volatility_data[volatility_data['Материал'].str.contains(search_material)]
-            from modules.utils import format_streamlit_dataframe
-            st.dataframe(
-                format_streamlit_dataframe(filtered_materials),
-                use_container_width=True,
-                height=500  # Фиксированная высота для лучшего отображения
-            )
-        else:
-            # Показываем топ по волатильности
-            st.write("Топ-20 материалов с наибольшей волатильностью:")
-            from modules.utils import format_streamlit_dataframe
-            st.dataframe(
-                format_streamlit_dataframe(volatility_data.head(20)),
-                use_container_width=True,
-                height=500  # Фиксированная высота для лучшего отображения
-            )
-            
-            st.write("Топ-20 материалов с наименьшей ненулевой волатильностью:")
-            st.dataframe(
-                format_streamlit_dataframe(volatility_data[volatility_data['Коэффициент вариации'] > 0].tail(20)),
-                use_container_width=True,
-                height=500  # Фиксированная высота для лучшего отображения
-            )
-    
-    def analyze_stability(self, data):
-        """
-        Анализирует стабильность цен материалов
-        """
-        st.header("Анализ стабильности цен материалов")
-        
-        st.write("""
-        Стабильные материалы - это материалы, у которых 80% или более записей имеют одинаковую цену.
-        Это может указывать на долгосрочные контракты или стабильные рыночные условия.
-        """)
-        
-        # Вычисляем стабильность для каждого материала
-        stability_data = self._calculate_stability(data)
-        
-        # Сохраняем результаты анализа в session_state
-        st.session_state.stability_data = stability_data
-        
-        # Отображаем результаты
-        st.subheader("Результаты анализа стабильности")
-        
-        # Статистика по стабильности
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            stable_count = stability_data['Стабильная цена'].sum()
-            stable_percent = (stable_count / len(stability_data)) * 100
-            
-            st.metric(
-                "Стабильные материалы", 
-                f"{stable_count} ({stable_percent:.1f}%)"
-            )
-        
-        with col2:
-            # Средний процент одинаковых значений
-            st.metric(
-                "Средний % одинаковых значений", 
-                f"{stability_data['Процент одинаковых значений'].mean():.2f}%"
-            )
-        
-        # Поиск материала по коду
-        search_material = st.text_input("Поиск материала по коду (для анализа стабильности):")
-        
-        if search_material:
-            filtered_materials = stability_data[stability_data['Материал'].str.contains(search_material)]
-            from modules.utils import format_streamlit_dataframe
-            st.dataframe(
-                format_streamlit_dataframe(filtered_materials),
-                use_container_width=True,
-                height=500  # Фиксированная высота для лучшего отображения
-            )
-        else:
-            # Показываем материалы с наибольшим процентом одинаковых значений
-            st.write("Топ-20 материалов с наибольшим процентом одинаковых значений:")
-            from modules.utils import format_streamlit_dataframe
-            st.dataframe(
-                format_streamlit_dataframe(stability_data.head(20)),
-                use_container_width=True,
-                height=500  # Фиксированная высота для лучшего отображения
-            )
-    
-    def analyze_inactivity(self, data):
-        """
-        Анализирует неактивные материалы
-        """
-        st.header("Анализ неактивных материалов")
-        
-        st.write("""
-        Неактивные материалы - это материалы, по которым не было записей в течение длительного периода времени.
-        По умолчанию, материал считается неактивным, если прошло более 365 дней с последней записи.
-        """)
-        
-        # Вычисляем неактивность для каждого материала
-        inactivity_data = self._calculate_inactivity(data)
-        
-        # Сохраняем результаты анализа в session_state
-        st.session_state.inactivity_data = inactivity_data
-        
-        # Отображаем результаты
-        st.subheader("Результаты анализа неактивности")
-        
-        # Статистика по неактивности
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            inactive_count = inactivity_data['Неактивный материал'].sum()
-            inactive_percent = (inactive_count / len(inactivity_data)) * 100
-            
-            st.metric(
-                "Неактивные материалы", 
-                f"{inactive_count} ({inactive_percent:.1f}%)"
-            )
-        
-        with col2:
-            # Среднее количество дней с последней активности
-            st.metric(
-                "Среднее время неактивности", 
-                f"{inactivity_data['Дней с последней активности'].mean():.1f} дней"
-            )
-        
-        with col3:
-            # Максимальное количество дней с последней активности
-            st.metric(
-                "Максимальное время неактивности", 
-                f"{inactivity_data['Дней с последней активности'].max():.0f} дней"
-            )
-        
-        # Настройка порога неактивности
-        inactivity_threshold = st.slider(
-            "Порог неактивности (дней)", 
-            min_value=30, 
-            max_value=1000, 
-            value=365, 
-            step=30
-        )
-        
-        # Обновляем статус неактивности в соответствии с выбранным порогом
-        inactivity_data['Неактивный материал'] = inactivity_data['Дней с последней активности'] > inactivity_threshold
-        
-        # Вычисляем новые показатели
-        inactive_count_new = inactivity_data['Неактивный материал'].sum()
-        inactive_percent_new = (inactive_count_new / len(inactivity_data)) * 100
-        
-        st.info(f"При пороге {inactivity_threshold} дней неактивных материалов: {inactive_count_new} ({inactive_percent_new:.1f}%)")
-        
-        # Поиск материала по коду
-        search_material = st.text_input("Поиск материала по коду (для анализа неактивности):")
-        
-        if search_material:
-            filtered_materials = inactivity_data[inactivity_data['Материал'].str.contains(search_material)]
-            from modules.utils import format_streamlit_dataframe
-            st.dataframe(
-                format_streamlit_dataframe(filtered_materials),
-                use_container_width=True,
-                height=500  # Фиксированная высота для лучшего отображения
-            )
-        else:
-            # Показываем материалы с наибольшим периодом неактивности
-            st.write("Топ-20 материалов с наибольшим периодом неактивности:")
-            from modules.utils import format_streamlit_dataframe
-            st.dataframe(
-                format_streamlit_dataframe(inactivity_data.sort_values('Дней с последней активности', ascending=False).head(20)),
-                use_container_width=True,
-                height=500  # Фиксированная высота для лучшего отображения
-            )
-    
-    def _calculate_volatility(self, data):
-        """
-        Вычисляет волатильность цен для каждого материала
-        """
-        # Группируем данные по материалам
-        volatility_data = []
-        
-        for material, group in data.groupby('Материал'):
-            # Вычисляем статистики только если есть больше одной записи
-            if len(group) > 1:
-                # Среднее значение цены
-                mean_price = group['Цена нетто'].mean()
-                
-                # Стандартное отклонение цены
-                std_price = group['Цена нетто'].std()
-                
-                # Коэффициент вариации (в процентах)
-                if mean_price != 0:
-                    cv = (std_price / mean_price) * 100
-                else:
-                    cv = 0
-                
-                # Количество записей
-                num_records = len(group)
-                
-                # Минимальная и максимальная цена
-                min_price = group['Цена нетто'].min()
-                max_price = group['Цена нетто'].max()
-                
-                # Диапазон цен
-                price_range = max_price - min_price
-                
-                # Процентное изменение (от минимума к максимуму)
-                if min_price != 0:
-                    percent_change = (price_range / min_price) * 100
-                else:
-                    percent_change = 0
-                
-                volatility_data.append({
-                    'Материал': material,
-                    'Количество записей': num_records,
-                    'Средняя цена': mean_price,
-                    'Стандартное отклонение': std_price,
-                    'Коэффициент вариации': cv,
-                    'Минимальная цена': min_price,
-                    'Максимальная цена': max_price,
-                    'Диапазон цен': price_range,
-                    'Процентное изменение': percent_change
-                })
-            else:
-                # Для материалов с одной записью
-                volatility_data.append({
-                    'Материал': material,
-                    'Количество записей': 1,
-                    'Средняя цена': group['Цена нетто'].iloc[0],
-                    'Стандартное отклонение': 0,
-                    'Коэффициент вариации': 0,
-                    'Минимальная цена': group['Цена нетто'].iloc[0],
-                    'Максимальная цена': group['Цена нетто'].iloc[0],
-                    'Диапазон цен': 0,
-                    'Процентное изменение': 0
-                })
-        
-        # Создаем DataFrame и сортируем по коэффициенту вариации
-        volatility_df = pd.DataFrame(volatility_data)
-        volatility_df = volatility_df.sort_values('Коэффициент вариации', ascending=False)
-        
+            low_vol = (volatility_df['Коэффициент вариации'] < 10).sum()
+            st.metric("Временные ряды с низкой волатильностью", f"{low_vol / len(volatility_df) * 100:.1f}%")
+
+        # show tables
+        from modules.utils import format_streamlit_dataframe
+        st.subheader("Топ-20 по волатильности")
+        st.dataframe(format_streamlit_dataframe(volatility_df.head(20)), use_container_width=True, height=400)
+
+        st.subheader("Топ-20 с наименьшей ненулевой волатильностью")
+        st.dataframe(format_streamlit_dataframe(volatility_df[volatility_df['Коэффициент вариации'] > 0].tail(20)), use_container_width=True, height=400)
+
         return volatility_df
-    
-    def _calculate_stability(self, data):
-        """
-        Вычисляет стабильность цен для каждого материала
-        """
-        # Группируем данные по материалам
-        stability_data = []
-        
-        for material, group in data.groupby('Материал'):
-            # Вычисляем частоту встречаемости каждого значения цены
-            price_counts = group['Цена нетто'].value_counts()
-            
-            # Количество записей
-            num_records = len(group)
-            
-            # Наиболее часто встречающаяся цена
-            most_common_price = price_counts.index[0] if len(price_counts) > 0 else None
-            
-            # Количество записей с наиболее частой ценой
-            most_common_count = price_counts.iloc[0] if len(price_counts) > 0 else 0
-            
-            # Процент одинаковых значений
-            percent_same_value = (most_common_count / num_records) * 100 if num_records > 0 else 0
-            
-            # Флаг стабильности (80% или более одинаковых значений)
-            is_stable = percent_same_value >= 80
-            
-            # Количество уникальных значений цены
-            unique_prices_count = len(price_counts)
-            
-            stability_data.append({
-                'Материал': material,
-                'Количество записей': num_records,
-                'Наиболее частая цена': most_common_price,
-                'Количество одинаковых значений': most_common_count,
-                'Процент одинаковых значений': percent_same_value,
-                'Стабильная цена': is_stable,
-                'Количество уникальных цен': unique_prices_count
-            })
-        
-        # Создаем DataFrame и сортируем по проценту одинаковых значений
-        stability_df = pd.DataFrame(stability_data)
-        stability_df = stability_df.sort_values('Процент одинаковых значений', ascending=False)
-        
+
+    def analyze_stability(self, data: pd.DataFrame):
+        st.header("Анализ стабильности целевых значений")
+        stability_df = self._calculate_stability(data)
+        st.session_state['stability_data'] = stability_df
+
+        from modules.utils import format_streamlit_dataframe
+        st.dataframe(format_streamlit_dataframe(stability_df.head(50)), use_container_width=True, height=400)
         return stability_df
-    
-    def _calculate_inactivity(self, data):
-        """
-        Вычисляет неактивность материалов
-        """
-        # Текущая дата для расчета периода неактивности
-        # Используем максимальную дату в данных в качестве "текущей" даты
-        current_date = data['ДатаСоздан'].max()
-        
-        # Группируем данные по материалам
-        inactivity_data = []
-        
-        for material, group in data.groupby('Материал'):
-            # Количество записей
-            num_records = len(group)
-            
-            # Первая дата записи
-            first_date = group['ДатаСоздан'].min()
-            
-            # Последняя дата записи
-            last_date = group['ДатаСоздан'].max()
-            
-            # Количество дней между первой и последней записью
+
+    def analyze_inactivity(self, data: pd.DataFrame):
+        st.header("Анализ неактивности временных рядов")
+        inactivity_df = self._calculate_inactivity(data)
+        st.session_state['inactivity_data'] = inactivity_df
+
+        from modules.utils import format_streamlit_dataframe
+        st.dataframe(format_streamlit_dataframe(inactivity_df.head(50)), use_container_width=True, height=400)
+        return inactivity_df
+
+    # --- Core calculators ---
+    def _calculate_volatility(self, data: pd.DataFrame) -> pd.DataFrame:
+        df = data.copy()
+        material_col = self._resolve_material_col(df)
+        price_col = self._resolve_price_col(df)
+
+        if material_col is None:
+            raise KeyError(f"Не найден идентификатор временного ряда. Ожидаемая колонка: '{self.ROLE_ID}'")
+        if price_col is None:
+            raise KeyError(f"Не найдена целевая колонка. Ожидалась '{self.ROLE_TARGET} (норм.)' или '{self.ROLE_TARGET}'")
+
+        df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
+
+        grouped = df.groupby(material_col)[price_col].agg(['count', 'mean', 'std', 'min', 'max']).reset_index()
+        grouped = grouped.rename(columns={'count': 'Количество записей', 'mean': 'Среднее значение', 'std': 'Стандартное отклонение', 'min': 'Минимальное значение', 'max': 'Максимальное значение'})
+        grouped['Коэффициент вариации'] = (grouped['Стандартное отклонение'] / grouped['Среднее значение'].replace(0, np.nan)) * 100
+        grouped['Коэффициент вариации'] = grouped['Коэффициент вариации'].fillna(0)
+        grouped['Диапазон значений'] = grouped['Максимальное значение'] - grouped['Минимальное значение']
+        grouped['Процентное изменение'] = np.where(grouped['Минимальное значение'] != 0, (grouped['Диапазон значений'] / grouped['Минимальное значение']) * 100, 0)
+
+        grouped = grouped.sort_values('Коэффициент вариации', ascending=False).reset_index(drop=True)
+        # ensure identifier column name equals role-based ID
+        if material_col != self.ROLE_ID and self.ROLE_ID not in grouped.columns:
+            grouped = grouped.rename(columns={material_col: self.ROLE_ID})
+        return grouped
+
+    def _calculate_stability(self, data: pd.DataFrame) -> pd.DataFrame:
+        df = data.copy()
+        material_col = self._resolve_material_col(df)
+        price_col = self._resolve_price_col(df)
+
+        if material_col is None:
+            raise KeyError(f"Не найден идентификатор временного ряда. Ожидаемая колонка: '{self.ROLE_ID}'")
+        if price_col is None:
+            raise KeyError(f"Не найдена целевая колонка. Ожидалась '{self.ROLE_TARGET} (норм.)' или '{self.ROLE_TARGET}'")
+
+        df[price_col] = pd.to_numeric(df[price_col], errors='coerce')
+
+        results = []
+        for material, grp in df.groupby(material_col):
+            price_counts = grp[price_col].value_counts(dropna=True)
+            num_records = len(grp)
+            most_common_price = price_counts.index[0] if len(price_counts) > 0 else np.nan
+            most_common_count = price_counts.iloc[0] if len(price_counts) > 0 else 0
+            percent_same = (most_common_count / num_records) * 100 if num_records > 0 else 0
+            is_stable = percent_same >= 80
+            results.append({
+                    self.ROLE_ID: material,
+                'Количество записей': num_records,
+                'Наиболее частое значение': most_common_price,
+                'Количество одинаковых значений': most_common_count,
+                'Процент одинаковых значений': percent_same,
+                'Стабильное значение': is_stable,
+                'Количество уникальных значений': int(price_counts.size)
+            })
+
+        stability_df = pd.DataFrame(results).sort_values('Процент одинаковых значений', ascending=False).reset_index(drop=True)
+        # rename identifier column to canonical role id
+        if material_col != self.ROLE_ID and self.ROLE_ID not in stability_df.columns:
+            stability_df = stability_df.rename(columns={material_col: self.ROLE_ID})
+        return stability_df
+
+    def _calculate_inactivity(self, data: pd.DataFrame) -> pd.DataFrame:
+        df = data.copy()
+        material_col = self._resolve_material_col(df)
+        date_col = self._resolve_date_col(df)
+
+        if material_col is None:
+            raise KeyError(f"Не найден идентификатор временного ряда. Ожидаемая колонка: '{self.ROLE_ID}'")
+        if date_col is None:
+            raise KeyError(f"Не найдена колонка с датой. Ожидаемая колонка: '{self.ROLE_DATE}'")
+
+        # ensure datetime
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        current_date = df[date_col].max()
+
+        results = []
+        for material, grp in df.groupby(material_col):
+            num_records = len(grp)
+            first_date = grp[date_col].min()
+            last_date = grp[date_col].max()
             days_span = (last_date - first_date).days if num_records > 1 else 0
-            
-            # Средний интервал между записями (в днях)
             avg_interval = days_span / (num_records - 1) if num_records > 1 else None
-            
-            # Количество дней с последней активности
-            days_since_last_activity = (current_date - last_date).days
-            
-            # Флаг неактивности (более 365 дней без записей)
-            is_inactive = days_since_last_activity > 365
-            
-            inactivity_data.append({
-                'Материал': material,
+            days_since_last = (current_date - last_date).days if pd.notnull(last_date) and pd.notnull(current_date) else None
+            is_inactive = days_since_last is not None and days_since_last > 365
+
+            results.append({
+                    self.ROLE_ID: material,
                 'Количество записей': num_records,
                 'Первая дата': first_date,
                 'Последняя дата': last_date,
                 'Временной диапазон (дни)': days_span,
                 'Средний интервал (дни)': avg_interval,
-                'Последняя активность материала': last_date,
-                'Дней с последней активности': days_since_last_activity,
-                'Неактивный материал': is_inactive
+                'Последняя активность': last_date,
+                'Дней с последней активности': days_since_last,
+                'Неактивный временной ряд': is_inactive
             })
-        
-        # Создаем DataFrame и сортируем по количеству дней с последней активности
-        inactivity_df = pd.DataFrame(inactivity_data)
-        inactivity_df = inactivity_df.sort_values('Дней с последней активности', ascending=False)
-        
+
+        inactivity_df = pd.DataFrame(results).sort_values('Дней с последней активности', ascending=False).reset_index(drop=True)
+        # rename identifier column to canonical role id
+        if material_col != self.ROLE_ID and self.ROLE_ID not in inactivity_df.columns:
+            inactivity_df = inactivity_df.rename(columns={material_col: self.ROLE_ID})
         return inactivity_df

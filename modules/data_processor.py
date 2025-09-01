@@ -9,236 +9,277 @@ class DataProcessor:
     Класс для предварительной обработки данных
     """
     
-    def __init__(self):
-        pass
+    def __init__(self, role_names=None):
+        """role_names: dict с ключами 'ROLE_ID','ROLE_DATE','ROLE_TARGET','ROLE_QTY','ROLE_CURRENCY','ROLE_RATE'"""
+        self.role_names = role_names or {
+            'ROLE_ID': 'ID',
+            'ROLE_DATE': 'Дата',
+            'ROLE_TARGET': 'Целевая Колонка',
+            'ROLE_QTY': 'Количество',
+            'ROLE_CURRENCY': 'Валюта',
+            'ROLE_RATE': 'Курс'
+        }
     
-    def process_data(self, data):
+    def process_data(self, data, column_mapping=None):
         """
         Выполняет предварительную обработку данных
         
         Args:
             data: pandas DataFrame с исходными данными
+            column_mapping: dict или None. Ожидается словарь с ключами:
+                'ID','Дата','Целевая','Количество','ЕЦЗ','Валюта','Курс'
+                значения — имена колонок в загруженных данных или None.
+                Метод переименует выбранные колонки в внутренние имена:
+                ID -> 'Материал', Дата -> 'ДатаСоздан', Целевая -> 'Цена нетто',
+                Количество -> 'за', ЕЦЗ -> 'ЕЦЗ', Валюта -> 'Влт', Курс -> 'Курс'.
         
         Returns:
             pandas DataFrame с обработанными данными
         """
         # Создаем копию данных, чтобы не изменять исходный DataFrame
         df = data.copy()
-        
-        # Обработка колонки Материал
-        df = self._process_material_column(df)
-        
-        # Обработка колонки ДатаСоздан
-        df = self._process_date_column(df)
-        
-        # Обработка колонки Цена нетто
-        df = self._process_price_column(df)
-        
-        # Обработка колонки Курс
-        df = self._process_exchange_rate_column(df)
-        
-        # Нормализация цен в единую валюту (если несколько валют)
-        df = self._normalize_prices(df)
-        
-        # Заполнение пропущенных значений
-        df = self._fill_missing_values(df)
-        
-        # Добавление дополнительных признаков
-        df = self._add_features(df)
-        
-        return df
-    
-    def _process_material_column(self, df):
-        """
-        Обрабатывает колонку Материал
-        """
-        # Убедимся, что колонка Материал существует
-        if "Материал" not in df.columns:
-            st.error("Колонка 'Материал' не найдена в данных")
+
+        # Обязуем использовать только переданный маппинг: все дальнейшие операции
+        # работают с роль-именами: 'ID','Дата','Целевая','Количество','ЕЦЗ','Валюта','Курс'.
+        # Если маппинг не передан — прекращаем обработку.
+        # Роли, используемые в процессе обработки
+        ROLE_ID = self.role_names.get('ROLE_ID')
+        ROLE_DATE = self.role_names.get('ROLE_DATE')
+        ROLE_TARGET = self.role_names.get('ROLE_TARGET')
+        ROLE_QTY = self.role_names.get('ROLE_QTY')
+        ROLE_CURRENCY = self.role_names.get('ROLE_CURRENCY')
+        ROLE_RATE = self.role_names.get('ROLE_RATE')
+        roles = [ROLE_ID, ROLE_DATE, ROLE_TARGET, ROLE_QTY, ROLE_CURRENCY, ROLE_RATE]
+        if not column_mapping:
+            st.error("Не задан маппинг колонок. Обработка требует указания соответствия ролей колонкам.")
             return df
-        
-        # Преобразуем в строку, если это не строка
-        df["Материал"] = df["Материал"].astype(str)
-        
-        # Удаляем лишние пробелы
-        df["Материал"] = df["Материал"].str.strip()
-        
-        return df
-    
-    def _process_date_column(self, df):
-        """
-        Обрабатывает колонку ДатаСоздан
-        """
-        # Убедимся, что колонка ДатаСоздан существует
-        if "ДатаСоздан" not in df.columns:
-            st.error("Колонка 'ДатаСоздан' не найдена в данных")
-            return df
-        
-        # Проверяем формат даты и преобразуем в datetime
+
         try:
-            # Пробуем различные форматы даты
+            # Для корректного переименования требуется, чтобы один источник не назначался
+            # на несколько ролей (т.к. одноимённое переименование в несколько имён невозможно).
+            selected_sources = [v for v in column_mapping.values() if v is not None]
+            if len(selected_sources) != len(set(selected_sources)):
+                st.error("В маппинге есть дубли: один источник назначен на несколько ролей. Переименование невозможно — назначьте уникальные источники для каждой роли.")
+                return df
+
+            # Переименовываем исходные колонки в имена ролей на месте (без создания новых столбцов)
+            renamed = []
+            for role in roles:
+                src = column_mapping.get(role)
+                if src is None:
+                    continue
+                if src not in df.columns:
+                    st.error(f"Выбранная колонка '{src}' для роли '{role}' не найдена в загруженных данных.")
+                    return df
+                if src == role:
+                    # уже имеет нужное имя
+                    continue
+                # если целевое имя роли уже занято другим столбцом (и это не тот же источник) — конфликт
+                if role in df.columns and role != src:
+                    st.error(f"Невозможно переименовать '{src}' в '{role}': колонка с именем роли уже существует и не совпадает с источником.")
+                    return df
+                # выполняем переименование
+                df.rename(columns={src: role}, inplace=True)
+                renamed.append((src, role))
+
+            st.info(f"Маппинг применён: {', '.join([f'{r}: {column_mapping.get(r)}' for r in roles if column_mapping.get(r)])}")
+            if renamed:
+                st.info(f"Переименованы колонки: {', '.join([f'{s} -> {t}' for s,t in renamed])}")
+        except Exception as e:
+            st.warning(f"Ошибка при применении маппинга колонок: {e}")
+
+        # Обработка колонок по ролям
+        df = self._process_id_column(df, ROLE_ID)
+        df = self._process_date_column(df, ROLE_DATE)
+        df = self._process_target_column(df, ROLE_TARGET)
+        df = self._process_exchange_rate_column(df, ROLE_RATE)
+
+        # Нормализация цен в единую валюту (если несколько валют)
+        df = self._normalize_prices(df, ROLE_TARGET, ROLE_RATE, ROLE_CURRENCY, ROLE_QTY, column_mapping=column_mapping)
+
+        # Заполнение пропущенных значений
+        df = self._fill_missing_values(df, ROLE_ID)
+
+        # Добавление дополнительных признаков
+        df = self._add_features(df, ROLE_ID, ROLE_DATE, ROLE_TARGET)
+
+        return df
+    
+    def _process_id_column(self, df, role_id):
+        """Обрабатывает идентификационную колонку (role_id)"""
+        if role_id not in df.columns:
+            st.error(f"Идентификационная колонка '{role_id}' не найдена в данных")
+            return df
+
+        df[role_id] = df[role_id].astype(str).str.strip()
+        return df
+    
+    def _process_date_column(self, df, role_date):
+        """Обрабатывает колонку с датой (role_date) и приводит к datetime"""
+        if role_date not in df.columns:
+            st.error(f"Колонка даты '{role_date}' не найдена в данных")
+            return df
+
+        try:
             date_formats = ["%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"]
-            
             for date_format in date_formats:
                 try:
-                    df["ДатаСоздан"] = pd.to_datetime(df["ДатаСоздан"], format=date_format)
+                    df[role_date] = pd.to_datetime(df[role_date], format=date_format)
                     break
-                except:
+                except Exception:
                     continue
-            
-            # Если ни один формат не подошел, пробуем автоопределение
-            if not pd.api.types.is_datetime64_dtype(df["ДатаСоздан"]):
-                df["ДатаСоздан"] = pd.to_datetime(df["ДатаСоздан"], errors="coerce")
-            
-            # Если после всех попыток есть NaT, предупреждаем пользователя
-            if df["ДатаСоздан"].isna().any():
-                st.warning(f"В колонке 'ДатаСоздан' обнаружены некорректные значения. "
-                           f"Количество пропущенных значений: {df['ДатаСоздан'].isna().sum()}")
-        
+
+            if not pd.api.types.is_datetime64_dtype(df[role_date]):
+                df[role_date] = pd.to_datetime(df[role_date], errors="coerce")
+
+            if df[role_date].isna().any():
+                st.warning(f"В колонке '{role_date}' обнаружены некорректные значения. Количество пропущенных: {df[role_date].isna().sum()}")
+
         except Exception as e:
-            st.error(f"Ошибка при обработке колонки 'ДатаСоздан': {str(e)}")
-        
+            st.error(f"Ошибка при обработке колонки даты '{role_date}': {str(e)}")
+
         return df
     
-    def _process_price_column(self, df):
-        """
-        Обрабатывает колонку Цена нетто
-        """
-        # Убедимся, что колонка Цена нетто существует
-        if "Цена нетто" not in df.columns:
-            st.error("Колонка 'Цена нетто' не найдена в данных")
+    def _process_target_column(self, df, role_target):
+        """Обрабатывает целевую колонку (role_target) — приведение к числу"""
+        if role_target not in df.columns:
+            st.error(f"Целевая колонка '{role_target}' не найдена в данных")
             return df
-        
+
         try:
-            # Преобразуем в строку для обработки
-            df["Цена нетто"] = df["Цена нетто"].astype(str)
-            
-            # Убираем пробелы и заменяем запятые на точки
-            df["Цена нетто"] = df["Цена нетто"].str.replace(" ", "")
-            df["Цена нетто"] = df["Цена нетто"].str.replace(",", ".")
-            
-            # Преобразуем в числовой формат
-            df["Цена нетто"] = pd.to_numeric(df["Цена нетто"], errors="coerce")
-            
-            # Проверяем на отрицательные значения
-            if (df["Цена нетто"] < 0).any():
-                st.warning(f"В колонке 'Цена нетто' обнаружены отрицательные значения. "
-                           f"Количество отрицательных значений: {(df['Цена нетто'] < 0).sum()}")
-            
-            # Проверяем на пропущенные значения
-            if df["Цена нетто"].isna().any():
-                st.warning(f"В колонке 'Цена нетто' обнаружены пропущенные значения. "
-                           f"Количество пропущенных значений: {df['Цена нетто'].isna().sum()}")
-        
+            df[role_target] = df[role_target].astype(str)
+            df[role_target] = df[role_target].str.replace(" ", "").str.replace(",", ".")
+            df[role_target] = pd.to_numeric(df[role_target], errors="coerce")
+
+            if (df[role_target] < 0).any():
+                st.warning(f"В целевой колонке '{role_target}' обнаружены отрицательные значения. Количество: {(df[role_target] < 0).sum()}")
+            if df[role_target].isna().any():
+                st.warning(f"В целевой колонке '{role_target}' обнаружены пропущенные значения. Количество: {df[role_target].isna().sum()}")
+
         except Exception as e:
-            st.error(f"Ошибка при обработке колонки 'Цена нетто': {str(e)}")
-        
+            st.error(f"Ошибка при обработке целевой колонки '{role_target}': {str(e)}")
+
         return df
     
-    def _process_exchange_rate_column(self, df):
-        """
-        Обрабатывает колонку Курс
-        """
-        # Убедимся, что колонка Курс существует
-        if "Курс" not in df.columns:
-            st.error("Колонка 'Курс' не найдена в данных")
+    def _process_exchange_rate_column(self, df, role_rate):
+        """Обрабатывает колонку курса валюты (role_rate)"""
+        # Если колонка курса не указана, создаём колонку с единицами
+        if role_rate not in df.columns:
+            st.info(f"Колонка курса '{role_rate}' не указана — все значения будут считаться как 1.0")
+            df[role_rate] = 1.0
             return df
-        
+
         try:
-            # Преобразуем в строку для обработки
-            df["Курс"] = df["Курс"].astype(str)
-            
-            # Убираем пробелы и заменяем запятые на точки
-            df["Курс"] = df["Курс"].str.replace(" ", "")
-            df["Курс"] = df["Курс"].str.replace(",", ".")
-            
-            # Преобразуем в числовой формат
-            df["Курс"] = pd.to_numeric(df["Курс"], errors="coerce")
-            
-            # Заполняем пропущенные значения 1 (предполагаем, что это базовая валюта)
-            df["Курс"] = df["Курс"].fillna(1.0)
-            
-            # Проверяем на нулевые или отрицательные значения
-            if (df["Курс"] <= 0).any():
-                st.warning(f"В колонке 'Курс' обнаружены нулевые или отрицательные значения. "
-                          f"Эти значения будут заменены на 1.")
-                df.loc[df["Курс"] <= 0, "Курс"] = 1.0
-        
+            df[role_rate] = df[role_rate].astype(str).str.replace(" ", "").str.replace(",", ".")
+            df[role_rate] = pd.to_numeric(df[role_rate], errors="coerce")
+            df[role_rate] = df[role_rate].fillna(1.0)
+            if (df[role_rate] <= 0).any():
+                st.warning(f"В колонке курса '{role_rate}' обнаружены нулевые или отрицательные значения — заменяю на 1.")
+                df.loc[df[role_rate] <= 0, role_rate] = 1.0
+
         except Exception as e:
-            st.error(f"Ошибка при обработке колонки 'Курс': {str(e)}")
-        
+            st.error(f"Ошибка при обработке колонки курса '{role_rate}': {str(e)}")
+
         return df
     
-    def _normalize_prices(self, df):
+    def _normalize_prices(self, df, role_target, role_rate, role_currency, role_qty, column_mapping=None):
+        """Нормализует целевую цену по курсу и количеству (в роли).
+        Возвращает df с новой колонкой f"{role_target} (норм.)" и колонкой базовой валюты.
         """
-        Нормализует цены в единую валюту
-        """
-        # Убедимся, что необходимые колонки существуют
-        required_columns = ["Цена нетто", "Курс", "Влт"]
-        if not all(col in df.columns for col in required_columns):
-            missing_columns = [col for col in required_columns if col not in df.columns]
-            st.error(f"Отсутствуют колонки для нормализации цен: {', '.join(missing_columns)}")
+        # role_target is required; rate, currency, qty are optional
+        if role_target not in df.columns:
+            st.error(f"Целевая колонка '{role_target}' не найдена в данных для нормализации")
             return df
-        
+
         try:
-            # Создаем колонку для нормализованной цены
-            df["Цена нетто (норм.)"] = df["Цена нетто"] * df["Курс"]
-            
-            # Определяем базовую валюту (наиболее часто встречающуюся)
-            if "Влт" in df.columns:
-                base_currency = df["Влт"].mode().iloc[0]
-                df["Базовая валюта"] = base_currency
-                st.info(f"Базовая валюта для нормализации цен: {base_currency}")
+            # Обработка колонки курса: используем маппинг — если роль 'Курс' была назначена в mapping,
+            # то используем колонку role_rate (она уже переименована в role_rate при применении mapping);
+            # если маппинга нет — игнорируем колонку 'Курс' даже если она есть в датасете.
+            if column_mapping and column_mapping.get(role_rate) is not None:
+                # ожидаем, что ранее мы переименовали колонку-источник в имя роли, поэтому берем df[role_rate]
+                rate_series = df[role_rate].astype(str).str.replace(" ", "").str.replace(",", ".")
+                rate_series = pd.to_numeric(rate_series, errors="coerce").fillna(1.0)
+                # заменим невалидные/<=0 на 1.0
+                rate_series.loc[rate_series <= 0] = 1.0
             else:
-                df["Базовая валюта"] = "RUB"  # Предполагаем, что базовая валюта - рубли
-        
+                rate_series = pd.Series(1.0, index=df.index)
+
+            # Обработка количества: если есть — привести к числу и заменить 0/NaN на 1, иначе единицы
+            if column_mapping and column_mapping.get(role_qty) is not None:
+                qty_series = df[role_qty].astype(str).str.replace(" ", "").str.replace(",", ".")
+                qty_series = pd.to_numeric(qty_series, errors="coerce")
+                qty_series = qty_series.replace(0, 1).fillna(1)
+            else:
+                qty_series = pd.Series(1.0, index=df.index)
+
+            # Убедимся, что целевая колонка числовая (предварительная очистка в _process_target_column должна помочь)
+            target_series = df[role_target]
+            try:
+                target_series = pd.to_numeric(target_series, errors="coerce")
+            except Exception:
+                # если не удалось привести — оставить как есть и попытаться вычислить (результатом будут NaN там, где нечисло)
+                target_series = pd.to_numeric(target_series.astype(str).str.replace(" ", "").str.replace(",", "."), errors="coerce")
+
+            # Нормализованная целевая цена: умножаем на курс (если есть) и делим на количество (если есть)
+            norm_col = f"{role_target} (норм.)"
+            df[norm_col] = (target_series.abs() * rate_series) / qty_series
+
+            # Базовая валюта: если указана колонка валюты — возьмём наиболее частую, иначе RUB
+            if column_mapping and column_mapping.get(role_currency) is not None:
+                try:
+                    base_currency = df[role_currency].mode().iloc[0]
+                    df["Базовая валюта"] = base_currency
+                    st.info(f"Базовая валюта для нормализации цен: {base_currency}")
+                except Exception:
+                    df["Базовая валюта"] = "RUB"
+            else:
+                df["Базовая валюта"] = "RUB"
+
         except Exception as e:
             st.error(f"Ошибка при нормализации цен: {str(e)}")
-        
+
         return df
     
-    def _fill_missing_values(self, df):
+    def _fill_missing_values(self, df, role_id):
         """
         Заполняет пропущенные значения
         """
         # Проверяем, есть ли пропущенные значения
         if df.isna().any().any():
             st.warning("В данных обнаружены пропущенные значения")
-            
-            # Заполняем пропущенные значения в числовых колонках медианой
+
+            # Заполняем пропущенные значения в числовых колонках медианой по группе идентификатора
             numeric_columns = df.select_dtypes(include=["number"]).columns
             for col in numeric_columns:
                 if df[col].isna().any():
-                    # Заполняем медианой по каждому материалу
-                    df[col] = df.groupby("Материал")[col].transform(
-                        lambda x: x.fillna(x.median() if not pd.isna(x.median()) else 0)
-                    )
-            
-            # Проверяем, остались ли пропущенные значения
+                    if role_id in df.columns:
+                        df[col] = df.groupby(role_id)[col].transform(
+                            lambda x: x.fillna(x.median() if not pd.isna(x.median()) else 0)
+                        )
+                    else:
+                        df[col] = df[col].fillna(df[col].median())
+
             if df.isna().any().any():
                 st.warning("Некоторые пропущенные значения остались после заполнения")
-        
+
         return df
     
-    def _add_features(self, df):
+    def _add_features(self, df, role_id, role_date, role_target):
         """
         Добавляет дополнительные признаки
         """
         try:
-            # Добавляем год, месяц и день
-            df["Год"] = df["ДатаСоздан"].dt.year
-            df["Месяц"] = df["ДатаСоздан"].dt.month
-            df["День"] = df["ДатаСоздан"].dt.day
-            
-            # Добавляем квартал
-            df["Квартал"] = df["ДатаСоздан"].dt.quarter
-            
-            # Добавляем день недели
-            df["День недели"] = df["ДатаСоздан"].dt.dayofweek
-            
-            # Добавляем количество дней от начала данных
-            min_date = df["ДатаСоздан"].min()
-            df["Дней от начала"] = (df["ДатаСоздан"] - min_date).dt.days
+            # Добавляем год, месяц и день на основе role_date
+            if role_date in df.columns:
+                df["Год"] = df[role_date].dt.year
+                df["Месяц"] = df[role_date].dt.month
+                df["День"] = df[role_date].dt.day
+
+                df["Квартал"] = df[role_date].dt.quarter
+                df["День недели"] = df[role_date].dt.dayofweek
+
+                min_date = df[role_date].min()
+                df["Дней от начала"] = (df[role_date] - min_date).dt.days
             
             # Добавляем признак сезонности (зима, весна, лето, осень)
             season_map = {
@@ -248,43 +289,32 @@ class DataProcessor:
             }
             df["Сезон"] = df["Месяц"].map(season_map)
             
-            # Добавляем количество записей для каждого материала
-            df["Количество записей материала"] = df.groupby("Материал")["Материал"].transform("count")
-            
-            # Добавляем среднюю цену для каждого материала
-            df["Средняя цена материала"] = df.groupby("Материал")["Цена нетто"].transform("mean")
-            
-            # Добавляем стандартное отклонение цены для каждого материала
-            df["Стд. отклонение цены материала"] = df.groupby("Материал")["Цена нетто"].transform("std")
-            
-            # Добавляем коэффициент вариации цены для каждого материала
-            df["Коэффициент вариации цены"] = (df["Стд. отклонение цены материала"] / df["Средняя цена материала"]) * 100
-            df["Коэффициент вариации цены"] = df["Коэффициент вариации цены"].replace([np.inf, -np.inf], np.nan).fillna(0)
-            
-            # Добавляем флаг стабильности цены (80% одинаковых значений)
-            def is_stable_price(group):
-                # Вычисляем долю наиболее часто встречающегося значения
-                most_common_value_count = group.value_counts().iloc[0] if len(group.value_counts()) > 0 else 0
-                return most_common_value_count / len(group) >= 0.8
-            
-            # Применяем функцию ко всем группам материалов
-            stable_materials = df.groupby("Материал")["Цена нетто"].apply(is_stable_price)
-            
-            # Добавляем результат в DataFrame
-            df["Стабильная цена"] = df["Материал"].map(stable_materials)
-            
-            # Добавляем временной диапазон для каждого материала (в днях)
-            df["Временной диапазон материала"] = df.groupby("Материал")["ДатаСоздан"].transform(
-                lambda x: (x.max() - x.min()).days if len(x) > 1 else 0
-            )
-            
-            # Добавляем время с последней активности (в днях)
-            latest_date = df["ДатаСоздан"].max()
-            df["Последняя активность материала"] = df.groupby("Материал")["ДатаСоздан"].transform("max")
-            df["Дней с последней активности"] = (latest_date - df["Последняя активность материала"]).dt.days
-            
-            # Добавляем флаг неактивных материалов (более года без активности)
-            df["Неактивный материал"] = df["Дней с последней активности"] > 365
+            # Добавляем количество записей для каждой ID-группы
+            if role_id in df.columns:
+                df["Количество записей"] = df.groupby(role_id)[role_id].transform("count")
+
+                # Средняя и стд по нормализованной цене (если есть)
+                norm_col = f"{role_target} (норм.)"
+                if norm_col in df.columns:
+                    df["Средняя цена"] = df.groupby(role_id)[norm_col].transform("mean")
+                    df["Стд. отклонение цены"] = df.groupby(role_id)[norm_col].transform("std")
+                    df["Коэффициент вариации цены"] = (df["Стд. отклонение цены"] / df["Средняя цена"]) * 100
+                    df["Коэффициент вариации цены"] = df["Коэффициент вариации цены"].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+                    def is_stable_price(group):
+                        most_common_value_count = group.value_counts().iloc[0] if len(group.value_counts()) > 0 else 0
+                        return most_common_value_count / len(group) >= 0.8
+
+                    stable_flags = df.groupby(role_id)[norm_col].apply(is_stable_price)
+                    df["Стабильная цена"] = df[role_id].map(stable_flags)
+
+                # Временной диапазон и последняя активность
+                if role_date in df.columns:
+                    df["Временной диапазон"] = df.groupby(role_id)[role_date].transform(lambda x: (x.max() - x.min()).days if len(x) > 1 else 0)
+                    latest_date = df[role_date].max()
+                    df["Последняя активность"] = df.groupby(role_id)[role_date].transform("max")
+                    df["Дней с последней активности"] = (latest_date - df["Последняя активность"]).dt.days
+                    df["Неактивный"] = df["Дней с последней активности"] > 365
         
         except Exception as e:
             st.error(f"Ошибка при добавлении признаков: {str(e)}")

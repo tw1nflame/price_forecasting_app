@@ -53,6 +53,16 @@ class DataLoader:
         if uploaded_file is not None:
             self._handle_file_upload(uploaded_file)
             
+        # Отображаем информацию о загруженных данных, если они есть
+        if 'data' in st.session_state:
+            self._display_loaded_data_info()
+            
+    def _display_loaded_data_info(self):
+        """Отображает постоянную информацию о загруженных данных"""
+        data = st.session_state.data
+        
+        st.success(f"✅ Данные загружены: {data.shape[0]} строк, {data.shape[1]} столбцов")
+        
     def _handle_file_upload(self, uploaded_file):
         """Обрабатывает загрузку из файла"""
         try:
@@ -162,24 +172,6 @@ class DataLoader:
             for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]
-            
-            st.success(f"Данные успешно загружены! Загружено {data.shape[0]} строк и {data.shape[1]} столбцов.")
-            
-            # Показываем информацию о данных
-            st.subheader("Информация о загруженных данных")
-            st.write(f"Количество строк: {data.shape[0]}")
-            st.write(f"Количество столбцов: {data.shape[1]}")
-            
-            # Показываем пример данных
-            st.subheader("Пример данных")
-            from modules.utils import format_streamlit_dataframe
-            st.dataframe(
-                format_streamlit_dataframe(data.head()),
-                use_container_width=True,
-                height=400
-            )
-            # Обновляем страницу, чтобы отразить изменения в боковой панели и очистить виджеты загрузки
-            st.rerun() 
             
         else:
             # Если _load_data вернул None, значит была ошибка при загрузке/парсинге

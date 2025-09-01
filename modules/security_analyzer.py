@@ -15,13 +15,75 @@ class SecurityAnalyzer:
     def __init__(self):
         self.risk_thresholds = {
             'high_volatility': 50,         # Высокий коэффициент вариации
-            'suspicious_stable': 0.5,      # Подозрительно стабильная цена
-            'price_jump': 200,             # Резкий скачок цены (%)
-            'purchase_frequency': 3,       # Подозрительная частота закупок (дни)
+            'suspicious_stable': 0.5,      # Подозрительно стабильное значение
+            'price_jump': 200,             # Резкий скачок значения (%)
+            'purchase_frequency': 3,       # Подозрительная частота событий (дни)
             'end_period_activity': 3,      # Активность в конце периода (дни)
             'quarterly_increase': 25,      # Повышение в конце квартала (%)
-            'round_price_tolerance': 0.01  # Допуск для округленных цен (%)
+            'round_price_tolerance': 0.01  # Допуск для округленных значений (%)
         }
+
+        # role_names will be injected from app; default to legacy names if not provided
+        self.role_names = {
+            'ROLE_ID': 'ID',
+            'ROLE_DATE': 'Дата',
+            'ROLE_TARGET': 'Целевая Колонка',
+            'ROLE_QTY': 'Количество',
+            'ROLE_CURRENCY': 'Валюта',
+            'ROLE_RATE': 'Курс'
+        }
+        self.ROLE_ID = self.role_names.get('ROLE_ID')
+        self.ROLE_DATE = self.role_names.get('ROLE_DATE')
+        self.ROLE_TARGET = self.role_names.get('ROLE_TARGET')
+
+    def set_role_names(self, role_names: dict):
+        """Установить ROLE_NAMES из app (позволяет backward-compatibility)
+
+        Это метод вызывается из app при создании SecurityAnalyzer, если требуется.
+        """
+        if not role_names:
+            return
+        self.role_names.update(role_names)
+        self.ROLE_ID = self.role_names.get('ROLE_ID')
+        self.ROLE_DATE = self.role_names.get('ROLE_DATE')
+        self.ROLE_TARGET = self.role_names.get('ROLE_TARGET')
+
+    def _resolve_columns(self, df: pd.DataFrame):
+        """Resolve identifier, date and price column names in a dataframe.
+
+        Preference order: ROLE_NAMES values -> legacy names -> sensible fallback (first column or None)
+        Returns: (id_col, date_col, price_col)
+        """
+        # identifier
+        if self.ROLE_ID in df.columns:
+            id_col = self.ROLE_ID
+        elif 'Материал' in df.columns:
+            id_col = 'Материал'
+        else:
+            id_col = df.columns[0]
+
+        # date
+        if self.ROLE_DATE in df.columns:
+            date_col = self.ROLE_DATE
+        elif 'ДатаСоздан' in df.columns:
+            date_col = 'ДатаСоздан'
+        else:
+            date_col = None
+
+        # price - prefer normalized column
+        norm_name = f"{self.ROLE_TARGET} (норм.)"
+        if norm_name in df.columns:
+            price_col = norm_name
+        elif self.ROLE_TARGET in df.columns:
+            price_col = self.ROLE_TARGET
+        elif 'Цена нетто (норм.)' in df.columns:
+            price_col = 'Цена нетто (норм.)'
+        elif 'Цена нетто' in df.columns:
+            price_col = 'Цена нетто'
+        else:
+            price_col = None
+
+        return id_col, date_col, price_col
     
     def analyze_security_risks(self, data, segments):
         """
@@ -29,33 +91,34 @@ class SecurityAnalyzer:
         
         Args:
             data: pandas DataFrame с обработанными данными
-            segments: словарь с сегментами материалов
+            segments: словарь с сегментами временных рядов
         
         Returns:
-            DataFrame с оценкой рисков для материалов
+            DataFrame с оценкой рисков для временных рядов
         """
         st.header("Анализ данных для служб информационной безопасности")
-        
+
         st.markdown("""
         Этот раздел предназначен для выявления потенциальных мошеннических схем и аномалий в данных.
         Система анализирует различные паттерны и индикаторы, которые могут свидетельствовать о нарушениях
         или требовать дополнительной проверки.
         """)
-        
+
         # Прогресс-бар и статус
         progress_bar = st.progress(0)
         status_text = st.empty()
         status_text.text("Начинаем анализ безопасности...")
-        
+
         try:
             # Используем Series вместо массива для unique, чтобы не создавать лишний объект
-            unique_materials = data['Материал'].unique()
+            id_col, date_col, price_col = self._resolve_columns(data)
+            unique_materials = data[id_col].unique()
             total_materials = len(unique_materials)
-            
+
             # Для очень больших объемов данных предлагаем оптимизированный анализ
             if (total_materials > 10000):
                 limit_analysis = st.checkbox(
-                    f"Обнаружено очень много материалов ({total_materials}). Ограничить анализ до 5000 случайных материалов?",
+                    f"Обнаружено очень много временных рядов ({total_materials}). Ограничить анализ до 5000 случайных рядов?",
                     value=True
                 )
                 if limit_analysis:
@@ -63,19 +126,20 @@ class SecurityAnalyzer:
                     rng = np.random.default_rng(42)  # Современная замена np.random.seed
                     unique_materials = rng.choice(unique_materials, size=5000, replace=False)
                     total_materials = 5000
-                    st.info(f"Анализ ограничен до {total_materials} случайных материалов")
-            
+                    st.info(f"Анализ ограничен до {total_materials} случайных временных рядов")
+
             # Используем пустой список для накопления результатов
             risk_data = []
-            
+
             # Оптимизируем размер батча в зависимости от объема данных
             batch_size = min(1000, max(100, total_materials // 10))  # Увеличиваем размер для меньшего числа итераций
-            
+
             # Создаем словарь для быстрого поиска сегмента - используем dict comprehension для оптимизации
             material_to_segment = {}
             for segment_name, segment_data in segments.items():
-                material_to_segment.update({m: segment_name for m in segment_data['Материал'].values})
-            
+                seg_id_col, _, _ = self._resolve_columns(segment_data)
+                material_to_segment.update({m: segment_name for m in segment_data[seg_id_col].values})
+
             # Мониторим память только если необходимо
             memory_warning_shown = False
             try:
@@ -84,57 +148,59 @@ class SecurityAnalyzer:
                 initial_memory = process.memory_info().rss / 1024 / 1024  # MB
             except ImportError:
                 process = None
-            
+
             # Обработка по оптимизированным чанкам
             for i in range(0, total_materials, batch_size):
                 batch_end = min(i + batch_size, total_materials)
                 batch_materials = unique_materials[i:batch_end]
-                
+
                 # Обновляем прогресс реже для ускорения обработки
                 if i % (batch_size * 2) == 0 or i == 0:
                     progress_value = i / total_materials
                     progress_bar.progress(progress_value)
-                    status_text.text(f"Анализ материалов... {i}/{total_materials}")
-                
+                    status_text.text(f"Анализ временных рядов... {i}/{total_materials}")
+
                 # Оптимизируем фильтрацию данных для батча
-                batch_data = data[data['Материал'].isin(batch_materials)]
-                
-                # Предварительная группировка по материалу для ускорения
-                grouped_data = dict(list(batch_data.groupby('Материал')))
-                
-                # Обрабатываем каждый материал
+                batch_data = data[data[id_col].isin(batch_materials)]
+
+                # Предварительная группировка по ID для ускорения
+                grouped_data = dict(list(batch_data.groupby(id_col)))
+
+                # Обрабатываем каждый временной ряд
                 for material in batch_materials:
                     if material not in grouped_data:
                         continue
-                        
-                    material_data = grouped_data[material].sort_values('ДатаСоздан')
-                    
+
+                    material_data = grouped_data[material]
+                    if date_col is not None and date_col in material_data.columns:
+                        material_data = material_data.sort_values(date_col)
+
                     if len(material_data) < 2:
                         continue
-                    
+
                     # Вычисляем метрики риска
-                    risk_metrics = self._calculate_risk_metrics(material_data)
-                    
+                    risk_metrics = self._calculate_risk_metrics(material_data, price_col=price_col, date_col=date_col)
+
                     # Определяем категорию риска
                     risk_category, risk_factors = self._determine_risk_category(risk_metrics)
-                    
-                    # Находим сегмент материала
+
+                    # Находим сегмент
                     material_segment = material_to_segment.get(material, "Не определен")
-                    
-                    # Сохраняем только необходимые данные
+
+                    # Сохраняем только необходимые данные (ключ идентификатора используем ROLE_ID)
                     risk_data.append({
-                        'Материал': material,
+                        id_col: material,
                         'Категория риска': risk_category,
                         'Факторы риска': risk_factors,
                         'Сегмент': material_segment,
                         'Количество записей': len(material_data),
                         'Коэффициент вариации': risk_metrics['volatility'],
-                        'Индекс аномальности цены': risk_metrics['price_anomaly_index'],
-                        'Индекс дробления закупок': risk_metrics['purchase_fragmentation'],
+                        'Индекс аномальности значения': risk_metrics['price_anomaly_index'],
+                        'Индекс дробления событий': risk_metrics['purchase_fragmentation'],
                         'Индекс сезонных отклонений': risk_metrics.get('seasonal_deviation', 0),  # Используем get для безопасного доступа
                         'Индекс подозрительности': risk_metrics['suspicion_index']
                     })
-                
+
                 # Проверяем использование памяти только каждые 5 батчей
                 if process and i % (batch_size * 5) == 0 and not memory_warning_shown:
                     current_memory = process.memory_info().rss / 1024 / 1024
@@ -142,168 +208,153 @@ class SecurityAnalyzer:
                     if memory_diff > 500:
                         st.warning(f"Высокое потребление памяти: {memory_diff:.1f} МБ. Если анализ слишком медленный, попробуйте ограничить выборку.")
                         memory_warning_shown = True  # Показываем предупреждение только один раз
-            
+
             # Создаем DataFrame из собранных данных один раз
             risk_df = pd.DataFrame(risk_data) if risk_data else pd.DataFrame()
-            
+
             # Сортируем только если есть данные
             if not risk_df.empty:
                 risk_df = risk_df.sort_values('Индекс подозрительности', ascending=False)
-            
+
             progress_bar.progress(1.0)
             status_text.text("Анализ завершен!")
-            
+
             if risk_df.empty:
-                st.warning("Не удалось обнаружить материалы с признаками риска")
+                st.warning("Не удалось обнаружить временные ряды с признаками риска")
                 return pd.DataFrame()
-            
+
             # Отображаем результаты
             # self._display_security_analysis_results(risk_df) # УДАЛЕНО
-            
+
             return risk_df
-        
+
         except Exception as e:
             from modules.utils import show_error_message
             show_error_message(e, "Ошибка при анализе безопасности", show_traceback=True)
-            st.info("Попробуйте ограничить количество анализируемых материалов или использовать меньший набор данных.")
+            st.info("Попробуйте ограничить количество анализируемых временных рядов или использовать меньший набор данных.")
             return pd.DataFrame()
     
-    def _calculate_risk_metrics(self, material_data):
+    def _calculate_risk_metrics(self, material_data, price_col=None, date_col=None):
         """
-        Вычисляет метрики риска для материала - оптимизированная версия
-        
+        Вычисляет метрики риска для временного ряда - исправленная и role-aware версия
+
         Args:
-            material_data: DataFrame с данными по одному материалу
-                
+            material_data: DataFrame с данными по одному временному ряду
+            price_col: имя целевой колонки (опционально)
+            date_col: имя колонки с датой (опционально)
+
         Returns:
             dict: словарь с метриками риска
         """
         metrics = {}
-        
-        # 1. Оптимизированный расчет базовых статистик
-        prices = material_data['Цена нетто'].values  # Используем numpy array для ускорения
-        
-        # Вычисляем все статистики за один проход по массиву
-        if len(prices) > 0:
+
+        # Resolve columns if not provided
+        if price_col is None or date_col is None:
+            resolved_id, resolved_date, resolved_price = self._resolve_columns(material_data)
+            if price_col is None:
+                price_col = resolved_price
+            if date_col is None:
+                date_col = resolved_date
+
+        # Prices as numpy array
+        prices = material_data[price_col].values if (price_col and price_col in material_data.columns) else np.array([])
+
+        # Basic stats
+        if prices.size > 0:
             mean_price = np.mean(prices)
             std_price = np.std(prices)
             min_price = np.min(prices)
             max_price = np.max(prices)
-            
-            # 2. Волатильность цены (без создания промежуточных объектов)
             metrics['volatility'] = (std_price / mean_price) * 100 if mean_price > 0 else 0
-            
-            # 3. Индекс аномальности цены
             metrics['price_anomaly_index'] = (max_price / min_price) if min_price > 0 else 1
         else:
-            # Для пустого массива устанавливаем значения по умолчанию
             metrics['volatility'] = 0
             metrics['price_anomaly_index'] = 1
-        
-        # 4. Анализ дробления закупок - оптимизированная версия
-        dates = material_data['ДатаСоздан'].values  # Используем numpy array
-        
-        if len(dates) > 1:
-            # Сортируем даты, только если они не отсортированы
+
+        # Event frequency / fragmentation
+        dates = material_data[date_col].values if (date_col and date_col in material_data.columns) else np.array([])
+        if dates.size > 1:
             if not np.all(np.diff(dates) >= np.timedelta64(0)):
                 dates = np.sort(dates)
-                
-            # Вычисляем разницу в днях
             date_diffs = np.diff(dates) / np.timedelta64(1, 'D')
-            
             metrics['avg_days_between_purchases'] = np.mean(date_diffs) if date_diffs.size > 0 else 0
             small_intervals = np.sum(date_diffs <= self.risk_thresholds['purchase_frequency'])
             metrics['purchase_fragmentation'] = small_intervals / date_diffs.size * 100 if date_diffs.size > 0 else 0
         else:
             metrics['avg_days_between_purchases'] = 0
             metrics['purchase_fragmentation'] = 0
-        
-        # 5. Анализ сезонности - оптимизировано для быстродействия
-        if len(material_data) >= 12:  # Минимум год данных для анализа сезонности
-            # Используем numpy для расчетов вместо pandas где возможно
-            months = material_data['ДатаСоздан'].dt.month.values
+
+        # Seasonality
+        if len(material_data) >= 12 and (date_col and price_col) and prices.size > 0:
+            months = material_data[date_col].dt.month.values
             unique_months = np.unique(months)
-            
             if len(unique_months) > 1:
-                # Для каждого уникального месяца находим среднюю цену
                 monthly_means = np.array([np.mean(prices[months == month]) for month in unique_months])
                 mean_of_means = np.mean(monthly_means)
                 std_of_means = np.std(monthly_means)
-                
                 metrics['seasonal_deviation'] = (std_of_means / mean_of_means) * 100 if mean_of_means > 0 else 0
             else:
                 metrics['seasonal_deviation'] = 0
         else:
             metrics['seasonal_deviation'] = 0
-        
-        # 6. Анализ активности в конце периодов
-        # Избегаем создания копии DataFrame, используем исходные значения
-        month_values = material_data['ДатаСоздан'].dt.month.values
-        day_values = material_data['ДатаСоздан'].dt.day.values
-        
-        # Закупки в конце месяца
-        end_of_month = np.mean(day_values >= 28) * 100
-        
-        # Закупки в конце квартала
-        end_of_quarter_months = np.array([3, 6, 9, 12])  # Месяцы конца квартала
-        is_quarter_end = np.isin(month_values, end_of_quarter_months)
-        is_month_end = day_values >= 28
-        end_of_quarter = np.mean(is_quarter_end & is_month_end) * 100 if len(is_quarter_end) > 0 else 0
-        
+
+        # End-of-period activity
+        if date_col and date_col in material_data.columns:
+            month_values = material_data[date_col].dt.month.values
+            day_values = material_data[date_col].dt.day.values
+            end_of_month = np.mean(day_values >= 28) * 100
+            end_of_quarter_months = np.array([3, 6, 9, 12])
+            is_quarter_end = np.isin(month_values, end_of_quarter_months)
+            is_month_end = day_values >= 28
+            end_of_quarter = np.mean(is_quarter_end & is_month_end) * 100 if len(is_quarter_end) > 0 else 0
+        else:
+            end_of_month = 0
+            end_of_quarter = 0
+
         metrics['end_of_month_activity'] = end_of_month
         metrics['end_of_quarter_activity'] = end_of_quarter
-        
-        # 7. Проверка на округленные цены - векторизованная версия
-        unique_prices = np.unique(prices)
+
+        # Rounded value detection
+        unique_prices = np.unique(prices) if prices.size > 0 else np.array([])
         rounded_prices_count = 0
-        
-        # Оптимизация для разного количества цен
-        if len(unique_prices) < 50:  # Для малого числа уникальных цен
-            for price in unique_prices:
-                if price <= 0:
-                    continue
+        if unique_prices.size > 0:
+            if len(unique_prices) < 50:
+                for price in unique_prices:
+                    if price <= 0:
+                        continue
+                    for magnitude in [10, 100, 1000, 10000, 100000]:
+                        if abs(price % magnitude) / price < self.risk_thresholds['round_price_tolerance']:
+                            rounded_prices_count += 1
+                            break
+            else:
+                processed = np.zeros(len(unique_prices), dtype=bool)
                 for magnitude in [10, 100, 1000, 10000, 100000]:
-                    if abs(price % magnitude) / price < self.risk_thresholds['round_price_tolerance']:
-                        rounded_prices_count += 1
+                    valid_prices = (unique_prices > 0) & (~processed)
+                    if not np.any(valid_prices):
                         break
+                    valid_indices = np.where(valid_prices)[0]
+                    valid_price_values = unique_prices[valid_indices]
+                    remainder_ratio = np.abs(valid_price_values % magnitude) / valid_price_values
+                    rounded_mask = remainder_ratio < self.risk_thresholds['round_price_tolerance']
+                    rounded_indices = valid_indices[rounded_mask]
+                    rounded_prices_count += len(rounded_indices)
+                    processed[rounded_indices] = True
+
+            unique_price_count = len(unique_prices)
+            metrics['rounded_prices_ratio'] = rounded_prices_count / unique_price_count * 100 if unique_price_count > 0 else 0
         else:
-            # Массив для отслеживания уже учтенных цен
-            processed = np.zeros(len(unique_prices), dtype=bool)
-            
-            # Проверяем для каждой величины
-            for magnitude in [10, 100, 1000, 10000, 100000]:
-                # Вычисляем маску только для положительных неучтенных цен
-                valid_prices = (unique_prices > 0) & (~processed)
-                if not np.any(valid_prices):
-                    break
-                    
-                # Вычисляем относительную разницу от кратного значения
-                valid_indices = np.where(valid_prices)[0]
-                valid_price_values = unique_prices[valid_indices]
-                
-                # Векторизованная проверка на округленность
-                remainder_ratio = np.abs(valid_price_values % magnitude) / valid_price_values
-                rounded_mask = remainder_ratio < self.risk_thresholds['round_price_tolerance']
-                
-                # Подсчитываем и отмечаем учтенные цены
-                rounded_indices = valid_indices[rounded_mask]
-                rounded_prices_count += len(rounded_indices)
-                processed[rounded_indices] = True
-        
-        unique_price_count = len(unique_prices)
-        metrics['rounded_prices_ratio'] = rounded_prices_count / unique_price_count * 100 if unique_price_count > 0 else 0
-        
-        # 8. Вычисляем общий индекс подозрительности
+            metrics['rounded_prices_ratio'] = 0
+
+        # Suspicion index
         suspicion_index = (
-            min(metrics['volatility'] * 0.5, 50) +                 # Волатильность (до 50 пунктов)
-            min((metrics['price_anomaly_index'] - 1) * 10, 30) +    # Аномальность цены (до 30 пунктов)
-            min(metrics['purchase_fragmentation'] * 0.5, 30) +      # Дробление закупок (до 30 пунктов)
-            min(metrics['end_of_quarter_activity'] * 0.5, 20) +     # Активность в конце квартала (до 20 пунктов)
-            min(metrics['rounded_prices_ratio'] * 0.3, 20)          # Округленные цены (до 20 пунктов)
+            min(metrics['volatility'] * 0.5, 50) +
+            min((metrics['price_anomaly_index'] - 1) * 10, 30) +
+            min(metrics['purchase_fragmentation'] * 0.5, 30) +
+            min(metrics.get('end_of_quarter_activity', 0) * 0.5, 20) +
+            min(metrics.get('rounded_prices_ratio', 0) * 0.3, 20)
         )
-        
-        metrics['suspicion_index'] = min(suspicion_index, 100)  # Максимум 100 пунктов
-        
+        metrics['suspicion_index'] = min(suspicion_index, 100)
+
         return metrics
     
     def _determine_risk_category(self, risk_metrics):
@@ -321,19 +372,19 @@ class SecurityAnalyzer:
         
         # Проверяем различные факторы риска
         if risk_metrics['volatility'] > self.risk_thresholds['high_volatility']:
-            risk_factors.append("Высокая волатильность цен")
+            risk_factors.append("Высокая волатильность значений")
         
         if risk_metrics['price_anomaly_index'] > 3:
-            risk_factors.append("Значительные скачки цен")
+            risk_factors.append("Значительные скачки значений")
         
         if risk_metrics['purchase_fragmentation'] > 30:
-            risk_factors.append("Признаки дробления закупок")
+            risk_factors.append("Признаки дробления событий")
         
         if risk_metrics['end_of_quarter_activity'] > 40:
             risk_factors.append("Повышенная активность в конце кварталов")
         
         if risk_metrics['rounded_prices_ratio'] > 70:
-            risk_factors.append("Подозрительно округленные цены")
+            risk_factors.append("Подозрительно округленные значения")
         
         # Определяем категорию риска
         if risk_metrics['suspicion_index'] >= 70:
@@ -352,148 +403,111 @@ class SecurityAnalyzer:
         Args:
             risk_df: DataFrame с данными о рисках
         """
+        # Resolve identifier column and a friendly display name
+        if risk_df is None or risk_df.empty:
+            st.warning("Результаты анализа безопасности отсутствуют или пусты.")
+            return
+
+        id_col, _, _ = self._resolve_columns(risk_df)
+        display_id_label = st.session_state.get('column_mapping', {}).get('ID', id_col) if 'column_mapping' in st.session_state else id_col
+
         # 1. Общая статистика
         st.subheader("Общая статистика анализа безопасности")
-        
-        total_materials = len(risk_df)
+
+        total_items = len(risk_df)
         high_risk = (risk_df['Категория риска'] == 'Высокий').sum()
         medium_risk = (risk_df['Категория риска'] == 'Средний').sum()
         low_risk = (risk_df['Категория риска'] == 'Низкий').sum()
-        
+
         col1, col2, col3 = st.columns(3)
-        
         with col1:
-            st.metric("Материалы с высоким риском", f"{high_risk} ({high_risk/total_materials*100:.1f}%)")
-        
+            st.metric("Временные ряды с высоким риском", f"{high_risk} ({high_risk/total_items*100:.1f}%)")
         with col2:
-            st.metric("Материалы со средним риском", f"{medium_risk} ({medium_risk/total_materials*100:.1f}%)")
-        
+            st.metric("Временные ряды со средним риском", f"{medium_risk} ({medium_risk/total_items*100:.1f}%)")
         with col3:
-            st.metric("Материалы с низким риском", f"{low_risk} ({low_risk/total_materials*100:.1f}%)")
-        
+            st.metric("Временные ряды с низким риском", f"{low_risk} ({low_risk/total_items*100:.1f}%)")
+
         # 2. Распределение рисков по сегментам
         st.subheader("Распределение рисков по сегментам")
-        
-        # Создаем сводную таблицу рисков по сегментам
-        risk_by_segment = pd.crosstab(
-            risk_df['Сегмент'], 
-            risk_df['Категория риска'],
-            normalize='index'
-        ) * 100
-        
-        # Преобразуем для визуализации
-        risk_by_segment_plot = risk_by_segment.reset_index().melt(
-            id_vars=['Сегмент'],
-            var_name='Категория риска',
-            value_name='Процент материалов'
-        )
-        
-        # Создаем столбчатую диаграмму
+        risk_by_segment = pd.crosstab(risk_df['Сегмент'], risk_df['Категория риска'], normalize='index') * 100
+        risk_by_segment_plot = risk_by_segment.reset_index().melt(id_vars=['Сегмент'], var_name='Категория риска', value_name='Процент временных рядов')
+
         fig = px.bar(
             risk_by_segment_plot,
             x='Сегмент',
-            y='Процент материалов',
+            y='Процент временных рядов',
             color='Категория риска',
             title='Распределение категорий риска по сегментам',
-            color_discrete_map={
-                'Высокий': '#FF4B4B',
-                'Средний': '#FFA72B',
-                'Низкий': '#2ECC71'
-            }
+            color_discrete_map={'Высокий': '#FF4B4B', 'Средний': '#FFA72B', 'Низкий': '#2ECC71'}
         )
-        
-        fig.update_layout(
-            xaxis_title='Сегмент',
-            yaxis_title='Процент материалов (%)',
-            barmode='stack'
-        )
-        
+        fig.update_layout(xaxis_title='Сегмент', yaxis_title='Процент временных рядов (%)', barmode='stack')
         st.plotly_chart(fig, use_container_width=True)
-        
-        # 3. Топ материалов с высоким риском
-        st.subheader("Топ материалов с высоким индексом подозрительности")
-        
-        # Фильтруем материалы с высоким риском
-        # Убедимся, что risk_df передан и не пуст
-        if risk_df is None or risk_df.empty:
-             st.warning("Нет данных для отображения топа материалов с риском.")
-             high_risk_materials = pd.DataFrame() # Пустой DataFrame
-        else:
-             high_risk_materials = risk_df.sort_values('Индекс подозрительности', ascending=False).head(20)
 
-        # Создаем таблицу с подсветкой (только если есть материалы)
-        if not high_risk_materials.empty:
-             for index, row in high_risk_materials.iterrows():
-                 with st.container():
-                     col1, col2, col3 = st.columns([3, 2, 5])
-                     
-                     with col1:
-                         st.write(f"**Материал:** {row['Материал']}")
-                         st.write(f"**Сегмент:** {row['Сегмент']}")
-                     
-                     with col2:
-                         # Цветовая индикация риска
-                         risk_color = "#FF4B4B" if row['Категория риска'] == "Высокий" else "#FFA72B" if row['Категория риска'] == "Средний" else "#2ECC71"
-                         st.markdown(f"""
-                         <div style="background-color: {risk_color}; padding: 10px; border-radius: 5px; color: white;">
-                             <strong>Риск:</strong> {row['Категория риска']}<br>
-                             <strong>Индекс:</strong> {row['Индекс подозрительности']:.1f}
-                         </div>
-                         """, unsafe_allow_html=True)
-                     
-                     with col3:
-                         st.markdown(f"**Факторы риска:** {row['Факторы риска']}")
-                     
-                     st.divider()
-        
-        # 4. Фильтр для поиска конкретных материалов
-        st.subheader("Поиск материалов по уровню риска")
-        
-        # Убедимся, что risk_df передан и не пуст для фильтрации
-        if risk_df is None or risk_df.empty:
-            st.warning("Нет данных для фильтрации и экспорта.")
-            filtered_risk_df = pd.DataFrame() # Пустой DataFrame
+        # 3. Топ временных рядов с высоким риском
+        st.subheader("Топ временных рядов с высоким индексом подозрительности")
+        high_risk_materials = risk_df.sort_values('Индекс подозрительности', ascending=False).head(20)
+        if high_risk_materials.empty:
+            st.warning("Нет данных для отображения топа временных рядов с риском.")
         else:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                risk_category_filter = st.selectbox(
-                    "Категория риска:",
-                    ["Все", "Высокий", "Средний", "Низкий"],
-                    key='security_risk_category_filter' # Добавляем ключ для уникальности
-                )
-            
-            with col2:
-                segment_filter = st.selectbox(
-                    "Сегмент:",
-                    ["Все"] + list(risk_df['Сегмент'].unique()),
-                    key='security_segment_filter' # Добавляем ключ для уникальности
-                )
-            
-            # Применяем фильтры
-            filtered_risk_df = risk_df.copy()
-            
-            if risk_category_filter != "Все":
-                filtered_risk_df = filtered_risk_df[risk_category_filter == filtered_risk_df['Категория риска']]
-            
-            if segment_filter != "Все":
-                filtered_risk_df = filtered_risk_df[filtered_risk_df['Сегмент'] == segment_filter]
+            for _, row in high_risk_materials.iterrows():
+                with st.container():
+                    c1, c2, c3 = st.columns([3,2,5])
+                    with c1:
+                        try:
+                            identifier_value = row[id_col]
+                        except Exception:
+                            identifier_value = row.get(self.ROLE_ID, '')
+                        st.write(f"**{display_id_label}:** {identifier_value}")
+                        st.write(f"**Сегмент:** {row['Сегмент']}")
+                    with c2:
+                        risk_color = "#FF4B4B" if row['Категория риска'] == "Высокий" else "#FFA72B" if row['Категория риска'] == "Средний" else "#2ECC71"
+                        st.markdown(f"""
+                        <div style="background-color: {risk_color}; padding: 10px; border-radius: 5px; color: white;">
+                            <strong>Риск:</strong> {row['Категория риска']}<br>
+                            <strong>Индекс:</strong> {row['Индекс подозрительности']:.1f}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with c3:
+                        st.markdown(f"**Факторы риска:** {row['Факторы риска']}")
+                    st.divider()
 
-            # Отображаем отфильтрованные данные
-            from modules.utils import create_styled_dataframe
-            st.dataframe(
-                create_styled_dataframe(
-                    filtered_risk_df,
-                    highlight_cols=['Индекс подозрительности'],
-                    highlight_threshold=70,
-                    precision=2
-                ),
-                use_container_width=True,
-                height=500
-            )
-        
+        # 4. Фильтр и таблица
+        st.subheader("Поиск временных рядов по уровню риска")
+        col1, col2 = st.columns(2)
+        with col1:
+            risk_category_filter = st.selectbox("Категория риска:", ["Все", "Высокий", "Средний", "Низкий"], key='security_risk_category_filter')
+        with col2:
+            segment_filter = st.selectbox("Сегмент:", ["Все"] + list(risk_df['Сегмент'].unique()), key='security_segment_filter')
+
+        filtered_risk_df = risk_df.copy()
+        if risk_category_filter != "Все":
+            filtered_risk_df = filtered_risk_df[filtered_risk_df['Категория риска'] == risk_category_filter]
+        if segment_filter != "Все":
+            filtered_risk_df = filtered_risk_df[filtered_risk_df['Сегмент'] == segment_filter]
+
+        from modules.utils import create_styled_dataframe
+        st.dataframe(create_styled_dataframe(filtered_risk_df, highlight_cols=['Индекс подозрительности'], highlight_threshold=70, precision=2), use_container_width=True, height=500)
+
         # 5. Экспорт данных
-        # Кнопки экспорта показываем только если есть отфильтрованные данные
+        if not filtered_risk_df.empty:
+            buffer = io.BytesIO()
+            filtered_risk_df.to_csv(buffer, index=False, encoding='utf-8-sig')
+            buffer.seek(0)
+            st.download_button(label="Скачать отчет о рисках (CSV)", data=buffer, file_name="security_risk_report.csv", mime="text/csv; charset=utf-8-sig")
+
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                filtered_risk_df.to_excel(writer, sheet_name='Отчет о рисках', index=False)
+                workbook = writer.book
+                worksheet = writer.sheets['Отчет о рисках']
+                header_format = workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'bg_color': '#D7E4BC', 'border': 1})
+                for col_num, value in enumerate(filtered_risk_df.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                for i, col in enumerate(filtered_risk_df.columns):
+                    column_width = max(filtered_risk_df[col].astype(str).map(len).max(), len(col)) + 2
+                    worksheet.set_column(i, i, column_width)
+            excel_buffer.seek(0)
+            st.download_button(label="Скачать отчет о рисках (Excel)", data=excel_buffer, file_name="security_risk_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         if not filtered_risk_df.empty:
             buffer = io.BytesIO()
             filtered_risk_df.to_csv(buffer, index=False, encoding='utf-8-sig')
@@ -545,37 +559,38 @@ class SecurityAnalyzer:
     
     def highlight_suspicious_materials(self, data, material_code=None):
         """
-        Визуализирует подозрительные паттерны для конкретного материала
+        Визуализирует подозрительные паттерны для конкретного временного ряда
         
         Args:
             data: pandas DataFrame с обработанными данными
-            material_code: код материала для анализа (если None, будет предложен выбор)
+            material_code: ID временного ряда для анализа (если None, будет предложен выбор)
         """
         st.subheader("Детальный анализ подозрительных паттернов")
         
-        # Если код материала не указан, предлагаем выбор
+        # Если ID не указан, предлагаем выбор
+        id_col, date_col, price_col = self._resolve_columns(data)
         if material_code is None:
-            # Получаем список материалов с наибольшей волатильностью
-            volatile_materials = data.groupby('Материал')['Цена нетто'].agg(['mean', 'std']).reset_index()
+            # Получаем список временных рядов с наибольшей волатильностью
+            volatile_materials = data.groupby(id_col)[price_col].agg(['mean', 'std']).reset_index()
             volatile_materials['volatility'] = volatile_materials['std'] / volatile_materials['mean'] * 100
             volatile_materials = volatile_materials.sort_values('volatility', ascending=False).head(50)
             
             material_code = st.selectbox(
-                "Выберите материал для анализа:",
-                volatile_materials['Материал'].tolist()
+                "Выберите временной ряд для анализа:",
+                volatile_materials[id_col].tolist()
             )
         
-        # Фильтруем данные по выбранному материалу
-        material_data = data[data['Материал'] == material_code].sort_values('ДатаСоздан')
+        # Фильтруем данные по выбранному ID
+        material_data = data[data[id_col] == material_code].sort_values(date_col)
         
         if material_data.empty:
-            st.warning(f"Данные для материала {material_code} не найдены")
+            st.warning(f"Данные для временного ряда {material_code} не найдены")
             return
         
-        # Отображаем основную информацию о материале
-        st.write(f"**Материал:** {material_code}")
+        # Отображаем основную информацию
+        st.write(f"**ID Временного ряда:** {material_code}")
         st.write(f"**Количество записей:** {len(material_data)}")
-        st.write(f"**Период данных:** {material_data['ДатаСоздан'].min().strftime('%d.%m.%Y')} - {material_data['ДатаСоздан'].max().strftime('%d.%m.%Y')}")
+        st.write(f"**Период данных:** {material_data[date_col].min().strftime('%d.%m.%Y')} - {material_data[date_col].max().strftime('%d.%m.%Y')}")
         
         # Анализируем данные для выявления подозрительных паттернов
         risk_metrics = self._calculate_risk_metrics(material_data)
@@ -591,36 +606,36 @@ class SecurityAnalyzer:
         </div>
         """, unsafe_allow_html=True)
         
-        # Визуализация 1: График изменения цены со временем с подсветкой аномалий
-        st.subheader("Динамика цен с подсветкой аномалий")
+        # Визуализация 1: График изменения целевого значения со временем с подсветкой аномалий
+        st.subheader("Динамика целевого значения с подсветкой аномалий")
         
         # Вычисляем скользящее среднее и стандартное отклонение
-        material_data['rolling_mean'] = material_data['Цена нетто'].rolling(window=5, min_periods=1).mean()
-        material_data['rolling_std'] = material_data['Цена нетто'].rolling(window=5, min_periods=1).std()
+        material_data['rolling_mean'] = material_data[price_col].rolling(window=5, min_periods=1).mean()
+        material_data['rolling_std'] = material_data[price_col].rolling(window=5, min_periods=1).std()
         
         # Определяем верхнюю и нижнюю границы для аномалий (2 стандартных отклонения)
         material_data['upper_bound'] = material_data['rolling_mean'] + 2 * material_data['rolling_std']
         material_data['lower_bound'] = material_data['rolling_mean'] - 2 * material_data['rolling_std']
         
         # Помечаем аномалии
-        material_data['is_anomaly'] = (material_data['Цена нетто'] > material_data['upper_bound']) | \
-                                       (material_data['Цена нетто'] < material_data['lower_bound'])
+        material_data['is_anomaly'] = (material_data[price_col] > material_data['upper_bound']) | \
+                                       (material_data[price_col] < material_data['lower_bound'])
         
         # Создаем график
         fig = go.Figure()
         
-        # Добавляем линию цены
+        # Добавляем линию целевого значения
         fig.add_trace(go.Scatter(
-            x=material_data['ДатаСоздан'],
-            y=material_data['Цена нетто'],
+            x=material_data[date_col],
+            y=material_data[price_col],
             mode='lines+markers',
-            name='Цена',
+            name='Значение',
             line=dict(color='#1976D2', width=2)
         ))
         
         # Добавляем скользящее среднее
         fig.add_trace(go.Scatter(
-            x=material_data['ДатаСоздан'],
+            x=material_data[date_col],
             y=material_data['rolling_mean'],
             mode='lines',
             name='Скользящее среднее',
@@ -629,7 +644,7 @@ class SecurityAnalyzer:
         
         # Добавляем границы аномалий
         fig.add_trace(go.Scatter(
-            x=material_data['ДатаСоздан'],
+            x=material_data[date_col],
             y=material_data['upper_bound'],
             mode='lines',
             name='Верхняя граница',
@@ -638,7 +653,7 @@ class SecurityAnalyzer:
         ))
         
         fig.add_trace(go.Scatter(
-            x=material_data['ДатаСоздан'],
+            x=material_data[date_col],
             y=material_data['lower_bound'],
             mode='lines',
             name='Нижняя граница',
@@ -652,8 +667,8 @@ class SecurityAnalyzer:
         if material_data['is_anomaly'].any():
             anomalies = material_data[material_data['is_anomaly']]
             fig.add_trace(go.Scatter(
-                x=anomalies['ДатаСоздан'],
-                y=anomalies['Цена нетто'],
+                x=anomalies[date_col],
+                y=anomalies[price_col],
                 mode='markers',
                 name='Аномалии',
                 marker=dict(
@@ -666,37 +681,37 @@ class SecurityAnalyzer:
         
         # Настройка внешнего вида
         fig.update_layout(
-            title=f'Динамика цен материала {material_code} с подсветкой аномалий',
+            title=f'Динамика целевого значения для {material_code} с подсветкой аномалий',
             xaxis_title='Дата',
-            yaxis_title='Цена нетто',
+            yaxis_title='Целевое значение (норм.)',
             legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
             height=500
         )
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # Визуализация 2: Анализ периодичности закупок
-        st.subheader("Анализ периодичности закупок")
+        # Визуализация 2: Анализ периодичности событий
+        st.subheader("Анализ периодичности событий")
         
         # Вычисляем разницу между последовательными датами
-        material_data['days_diff'] = material_data['ДатаСоздан'].diff().dt.days
+        material_data['days_diff'] = material_data[date_col].diff().dt.days
         
-        # Создаем гистограмму интервалов между закупками
+        # Создаем гистограмму интервалов между событиями
         fig = px.histogram(
             material_data.dropna(),
             x='days_diff',
             nbins=30,
-            title='Распределение интервалов между закупками (дни)',
+            title='Распределение интервалов между событиями (дни)',
             labels={'days_diff': 'Интервал (дни)', 'count': 'Количество случаев'},
             color_discrete_sequence=['#1976D2']
         )
         
-        # Добавляем вертикальную линию для порогового значения дробления закупок
+        # Добавляем вертикальную линию для порогового значения дробления
         fig.add_vline(
             x=self.risk_thresholds['purchase_frequency'],
             line_dash="dash",
             line_color="#FF4B4B",
-            annotation_text="Порог дробления закупок",
+            annotation_text="Порог дробления событий",
             annotation_position="top right"
         )
         
@@ -706,9 +721,9 @@ class SecurityAnalyzer:
         st.subheader("Активность по месяцам и кварталам")
         
         # Добавляем информацию о месяце, квартале и годе
-        material_data['Год'] = material_data['ДатаСоздан'].dt.year
-        material_data['Месяц'] = material_data['ДатаСоздан'].dt.month
-        material_data['Квартал'] = material_data['ДатаСоздан'].dt.quarter
+        material_data['Год'] = material_data[date_col].dt.year
+        material_data['Месяц'] = material_data[date_col].dt.month
+        material_data['Квартал'] = material_data[date_col].dt.quarter
         
         # Создаем сводную таблицу по годам и месяцам
         monthly_activity = material_data.groupby(['Год', 'Месяц']).size().reset_index(name='Количество')
@@ -733,11 +748,11 @@ class SecurityAnalyzer:
             x=[month_names[m] for m in monthly_activity_pivot.columns],
             y=monthly_activity_pivot.index,
             colorscale='YlOrRd',
-            colorbar=dict(title="Количество закупок")
+            colorbar=dict(title="Количество событий")
         ))
         
         fig.update_layout(
-            title='Тепловая карта активности закупок по месяцам',
+            title='Тепловая карта активности по месяцам',
             xaxis_title='Месяц',
             yaxis_title='Год',
             height=400
@@ -746,14 +761,15 @@ class SecurityAnalyzer:
         st.plotly_chart(fig, use_container_width=True)
         
         # Визуализация 4: Активность по дням месяца
+        material_data['День'] = material_data[date_col].dt.day
         monthly_day_activity = material_data.groupby(['День']).size().reset_index(name='Количество')
         
         fig = px.bar(
             monthly_day_activity,
             x='День',
             y='Количество',
-            title='Распределение закупок по дням месяца',
-            labels={'День': 'День месяца', 'Количество': 'Количество закупок'},
+            title='Распределение событий по дням месяца',
+            labels={'День': 'День месяца', 'Количество': 'Количество событий'},
             color='Количество',
             color_continuous_scale='YlOrRd'
         )
@@ -772,37 +788,37 @@ class SecurityAnalyzer:
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # Визуализация 5: Распределение цен (проверка на округленность)
-        st.subheader("Анализ распределения цен")
+        # Визуализация 5: Распределение значений (проверка на округленность)
+        st.subheader("Анализ распределения значений")
         
-        # Создаем гистограмму цен
+        # Создаем гистограмму
         fig = px.histogram(
             material_data,
-            x='Цена нетто',
+            x=price_col,
             nbins=30,
-            title='Распределение цен',
-            labels={'Цена нетто': 'Цена', 'count': 'Количество случаев'},
+            title='Распределение значений',
+            labels={price_col: 'Значение', 'count': 'Количество случаев'},
             color_discrete_sequence=['#1976D2']
         )
         
         st.plotly_chart(fig, use_container_width=True)
         
-        # Проверка на округленные цены
-        unique_prices = material_data['Цена нетто'].unique()
+        # Проверка на округленные значения
+        unique_prices = material_data[price_col].unique()
         rounded_prices = []
         
         for price in unique_prices:
             for magnitude in [10, 100, 1000, 10000, 100000]:
                 if abs(price % magnitude) / price < self.risk_thresholds['round_price_tolerance']:
                     rounded_prices.append({
-                        'Цена': price,
+                        'Значение': price,
                         'Округлено до': magnitude
                     })
                     break
         
         if rounded_prices:
-            st.subheader("Обнаруженные округленные цены")
-            st.write(f"**Процент округленных цен:** {len(rounded_prices) / len(unique_prices) * 100:.1f}%")
+            st.subheader("Обнаруженные округленные значения")
+            st.write(f"**Процент округленных значений:** {len(rounded_prices) / len(unique_prices) * 100:.1f}%")
             from modules.utils import format_streamlit_dataframe
             st.dataframe(
                 format_streamlit_dataframe(pd.DataFrame(rounded_prices)),
@@ -855,28 +871,30 @@ class SecurityAnalyzer:
         sheet_name = f"{material_code[:20]}_Общая" # Truncate material code if too long
         workbook = writer.book
         formats = self._get_excel_formats(workbook)
+        
+        _, date_col, price_col = self._resolve_columns(material_data)
 
         if material_data.empty:
-            info_df = pd.DataFrame({'Параметр': ['Материал'], 'Значение': [material_code]}) 
+            info_df = pd.DataFrame({'Параметр': ['ID Временного ряда'], 'Значение': [material_code]}) 
             info_df = pd.concat([info_df, pd.DataFrame({'Параметр': ['Ошибка'], 'Значение': ['Нет данных для анализа']})], ignore_index=True)
         else:
-            mean_price = material_data['Цена нетто'].mean()
-            std_price = material_data['Цена нетто'].std()
+            mean_price = material_data[price_col].mean()
+            std_price = material_data[price_col].std()
             volatility = (std_price / mean_price * 100) if mean_price > 0 else 0
             info_df = pd.DataFrame({
                 'Параметр': [
-                    'Материал', 'Количество записей', 'Первая дата', 'Последняя дата',
-                    'Средняя цена', 'Минимальная цена', 'Максимальная цена',
+                    'ID Временного ряда', 'Количество записей', 'Первая дата', 'Последняя дата',
+                    'Среднее значение', 'Минимальное значение', 'Максимальное значение',
                     'Стандартное отклонение', 'Коэффициент вариации (%)'
                 ],
                 'Значение': [
                     material_code,
                     len(material_data),
-                    material_data['ДатаСоздан'].min().strftime('%d.%m.%Y'),
-                    material_data['ДатаСоздан'].max().strftime('%d.%m.%Y'),
+                    material_data[date_col].min().strftime('%d.%m.%Y'),
+                    material_data[date_col].max().strftime('%d.%m.%Y'),
                     f"{mean_price:.2f}",
-                    f"{material_data['Цена нетто'].min():.2f}",
-                    f"{material_data['Цена нетто'].max():.2f}",
+                    f"{material_data[price_col].min():.2f}",
+                    f"{material_data[price_col].max():.2f}",
                     f"{std_price:.2f}",
                     f"{volatility:.2f}%"
                 ]
@@ -894,7 +912,7 @@ class SecurityAnalyzer:
         worksheet.set_column(1, 1, 25) # Value column
 
     def _write_purchase_data_sheet(self, writer, material_code, material_data):
-        """Записывает лист 'Данные закупок' в Excel."""
+        """Записывает лист 'Данные событий' в Excel."""
         sheet_name = f"{material_code[:20]}_Данные" 
         workbook = writer.book
         formats = self._get_excel_formats(workbook)
@@ -917,6 +935,8 @@ class SecurityAnalyzer:
         sheet_name = f"{material_code[:20]}_Аномалии"
         workbook = writer.book
         formats = self._get_excel_formats(workbook)
+        
+        _, date_col, price_col = self._resolve_columns(material_data)
 
         if len(material_data) < 2:
             pd.DataFrame({'Сообщение': ['Недостаточно данных для анализа аномалий (менее 2 записей)']}).to_excel(writer, sheet_name=sheet_name, index=False)
@@ -926,21 +946,21 @@ class SecurityAnalyzer:
 
         # Recalculate anomalies for export
         material_data_copy = material_data.copy()
-        material_data_copy['rolling_mean'] = material_data_copy['Цена нетто'].rolling(window=5, min_periods=1).mean()
-        material_data_copy['rolling_std'] = material_data_copy['Цена нетто'].rolling(window=5, min_periods=1).std()
+        material_data_copy['rolling_mean'] = material_data_copy[price_col].rolling(window=5, min_periods=1).mean()
+        material_data_copy['rolling_std'] = material_data_copy[price_col].rolling(window=5, min_periods=1).std()
         material_data_copy['upper_bound'] = material_data_copy['rolling_mean'] + 2 * material_data_copy['rolling_std']
         material_data_copy['lower_bound'] = material_data_copy['rolling_mean'] - 2 * material_data_copy['rolling_std']
         material_data_copy['is_anomaly'] = (
-            (material_data_copy['Цена нетто'] > material_data_copy['upper_bound']) | \
-            (material_data_copy['Цена нетто'] < material_data_copy['lower_bound'])
+            (material_data_copy[price_col] > material_data_copy['upper_bound']) | \
+            (material_data_copy[price_col] < material_data_copy['lower_bound'])
         ).fillna(False)
         
         anomalies_export_df = material_data_copy[[
-            'ДатаСоздан', 'Цена нетто', 'rolling_mean', 
+            date_col, price_col, 'rolling_mean', 
             'upper_bound', 'lower_bound', 'is_anomaly'
         ]]
         anomalies_export_df.columns = [
-            'Дата', 'Цена', 'Скользящее среднее (5)', 
+            'Дата', 'Значение', 'Скользящее среднее (5)', 
             'Верхняя граница (2σ)', 'Нижняя граница (2σ)', 'Аномалия'
         ]
 
@@ -965,6 +985,8 @@ class SecurityAnalyzer:
         sheet_name = f"{material_code[:20]}_Периоды"
         workbook = writer.book
         formats = self._get_excel_formats(workbook)
+        
+        _, date_col, _ = self._resolve_columns(material_data)
 
         if len(material_data) < 2:
             pd.DataFrame({'Сообщение': ['Недостаточно данных для анализа периодичности (менее 2 записей)']}).to_excel(writer, sheet_name=sheet_name, index=False)
@@ -973,9 +995,9 @@ class SecurityAnalyzer:
             return
 
         # Recalculate periodicity
-        material_data_copy = material_data.copy().sort_values('ДатаСоздан') # Ensure sorted
-        material_data_copy['days_diff'] = material_data_copy['ДатаСоздан'].diff().dt.days
-        periods_data = material_data_copy[['ДатаСоздан', 'days_diff']].dropna()
+        material_data_copy = material_data.copy().sort_values(date_col) # Ensure sorted
+        material_data_copy['days_diff'] = material_data_copy[date_col].diff().dt.days
+        periods_data = material_data_copy[[date_col, 'days_diff']].dropna()
         periods_data.columns = ['Дата', 'Интервал (дни)']
 
         periods_data.to_excel(writer, sheet_name=sheet_name, index=False)
@@ -1009,12 +1031,12 @@ class SecurityAnalyzer:
             
             risk_data = pd.DataFrame({
                 'Показатель': [
-                    'Волатильность цены (%)',
-                    'Индекс аномальности цены',
-                    'Индекс дробления закупок (%)',
+                    'Волатильность значения (%)',
+                    'Индекс аномальности значения',
+                    'Индекс дробления событий (%)',
                     'Активность в конце месяца (%)',
                     'Активность в конце квартала (%)',
-                    'Доля округленных цен (%)',
+                    'Доля округленных значений (%)',
                     'Общий индекс подозрительности',
                     'Категория риска',
                     'Факторы риска'
@@ -1059,33 +1081,57 @@ class SecurityAnalyzer:
 
     def export_detailed_analysis(self, data, material_code):
         """
-        Экспортирует детальный анализ подозрительного материала в Excel
+        Экспортирует детальный анализ подозрительного временного ряда в Excel
         (Теперь использует вспомогательные методы)
         
         Args:
             data: pandas DataFrame с обработанными данными
-            material_code: код материала для анализа
+            material_code: ID временного ряда для анализа
             
         Returns:
             bytes: содержимое Excel-файла или None
         """
-        # Фильтруем данные по выбранному материалу
-        material_data = data[data['Материал'] == material_code].sort_values('ДатаСоздан')
+        # Resolve columns and filter data by canonical identifier
+        id_col, date_col, price_col = self._resolve_columns(data)
+        if id_col in data.columns:
+            material_data = data[data[id_col] == material_code].copy()
+        else:
+            # fallback to empty
+            material_data = pd.DataFrame()
+
+        # Sort by resolved date column if available
+        if date_col and date_col in material_data.columns:
+            material_data = material_data.sort_values(date_col)
         
         if material_data.empty:
-            st.warning(f"Нет данных для материала {material_code} для экспорта.")
+            st.warning(f"Нет данных для временного ряда {material_code} для экспорта.")
             return None
         
+        # Before writing, adapt column names expected by helper methods
+        def _prepare_for_sheets(df):
+            df = df.copy()
+            # Map canonical id/date/price columns to legacy names used by helper methods
+            if id_col and id_col in df.columns:
+                df = df.rename(columns={id_col: 'Материал'}) # Legacy name expected by helpers
+            if date_col and date_col in df.columns:
+                df = df.rename(columns={date_col: 'ДатаСоздан'}) # Legacy name
+            if price_col and price_col in df.columns:
+                df = df.rename(columns={price_col: 'Цена нетто (норм.)'}) # Legacy name
+            return df
+
+        material_data_for_sheets = _prepare_for_sheets(material_data)
+
         excel_buffer = io.BytesIO()
         try:
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                self._write_general_info_sheet(writer, material_code, material_data)
-                self._write_purchase_data_sheet(writer, material_code, material_data)
-                self._write_anomaly_sheet(writer, material_code, material_data)
-                self._write_periodicity_sheet(writer, material_code, material_data)
-                self._write_risk_assessment_sheet(writer, material_code, material_data)
+                # Use prepared dataframe (with legacy column names) for helper methods
+                self._write_general_info_sheet(writer, material_code, material_data_for_sheets)
+                self._write_purchase_data_sheet(writer, material_code, material_data_for_sheets)
+                self._write_anomaly_sheet(writer, material_code, material_data_for_sheets)
+                self._write_periodicity_sheet(writer, material_code, material_data_for_sheets)
+                self._write_risk_assessment_sheet(writer, material_code, material_data_for_sheets)
         except Exception as e:
-            st.error(f"Ошибка при создании Excel файла для материала {material_code}: {e}")
+            st.error(f"Ошибка при создании Excel файла для временного ряда {material_code}: {e}")
             from modules.utils import show_error_message
             show_error_message(e, f"Ошибка Excel для {material_code}", show_traceback=False)
             return None
@@ -1095,18 +1141,18 @@ class SecurityAnalyzer:
 
     def export_multiple_detailed_analysis(self, data, material_codes):
         """
-        Экспортирует детальный анализ для НЕСКОЛЬКИХ материалов в один Excel файл.
-        Каждый материал получает свой набор листов с префиксом.
+        Экспортирует детальный анализ для НЕСКОЛЬКИХ временных рядов в один Excel файл.
+        Каждый временной ряд получает свой набор листов с префиксом.
 
         Args:
             data: pandas DataFrame с обработанными данными
-            material_codes: СПИСОК кодов материалов для анализа
+            material_codes: СПИСОК ID временных рядов для анализа
             
         Returns:
-            bytes: содержимое Excel-файла или None, если нет выбранных материалов
+            bytes: содержимое Excel-файла или None, если нет выбранных рядов
         """
         if not material_codes:
-            st.warning("Материалы для экспорта не выбраны.")
+            st.warning("Временные ряды для экспорта не выбраны.")
             return None
 
         excel_buffer = io.BytesIO()
@@ -1118,28 +1164,48 @@ class SecurityAnalyzer:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 total_materials_to_process = len(material_codes)
-                status_text.text(f"Подготовка отчета для {total_materials_to_process} материалов...")
+                status_text.text(f"Подготовка отчета для {total_materials_to_process} временных рядов...")
 
                 for i, material_code in enumerate(material_codes):
                     # Update progress
                     progress_value = (i + 1) / total_materials_to_process
                     progress_bar.progress(progress_value)
-                    status_text.text(f"Обработка материала: {material_code} ({i+1}/{total_materials_to_process})")
+                    status_text.text(f"Обработка временного ряда: {material_code} ({i+1}/{total_materials_to_process})")
                     
-                    # Filter data for the current material
-                    material_data = data[data['Материал'] == material_code].sort_values('ДатаСоздан')
+                    # Resolve columns and filter data for the current time series
+                    id_col, date_col, price_col = self._resolve_columns(data)
+                    if id_col in data.columns:
+                        material_data = data[data[id_col] == material_code].copy()
+                    else:
+                        material_data = pd.DataFrame()
+
+                    # Sort by resolved date column if available
+                    if date_col and date_col in material_data.columns:
+                        material_data = material_data.sort_values(date_col)
 
                     if material_data.empty:
-                        st.warning(f"Данные для материала {material_code} не найдены, пропуск в Excel отчете.")
+                        st.warning(f"Данные для временного ряда {material_code} не найдены, пропуск в Excel отчете.")
                         materials_skipped += 1
-                        continue # Skip to the next material
-                    
-                    # Call helper methods to write sheets for this material
-                    self._write_general_info_sheet(writer, material_code, material_data)
-                    self._write_purchase_data_sheet(writer, material_code, material_data)
-                    self._write_anomaly_sheet(writer, material_code, material_data)
-                    self._write_periodicity_sheet(writer, material_code, material_data)
-                    self._write_risk_assessment_sheet(writer, material_code, material_data)
+                        continue # Skip to the next
+                    # Prepare columns for helper methods (rename to legacy names)
+                    def _prepare_for_sheets(df):
+                        df = df.copy()
+                        if id_col and id_col in df.columns:
+                            df = df.rename(columns={id_col: 'Материал'})
+                        if date_col and date_col in df.columns:
+                            df = df.rename(columns={date_col: 'ДатаСоздан'})
+                        if price_col and price_col in df.columns:
+                            df = df.rename(columns={price_col: 'Цена нетто (норм.)'})
+                        return df
+
+                    material_data_for_sheets = _prepare_for_sheets(material_data)
+
+                    # Call helper methods to write sheets for this time series
+                    self._write_general_info_sheet(writer, material_code, material_data_for_sheets)
+                    self._write_purchase_data_sheet(writer, material_code, material_data_for_sheets)
+                    self._write_anomaly_sheet(writer, material_code, material_data_for_sheets)
+                    self._write_periodicity_sheet(writer, material_code, material_data_for_sheets)
+                    self._write_risk_assessment_sheet(writer, material_code, material_data_for_sheets)
                     materials_processed += 1
                 
                 progress_bar.empty() # Remove progress bar on completion
@@ -1152,11 +1218,11 @@ class SecurityAnalyzer:
             return None
 
         if materials_processed == 0:
-             st.error("Не удалось обработать ни один из выбранных материалов для Excel отчета.")
+             st.error("Не удалось обработать ни один из выбранных временных рядов для Excel отчета.")
              return None
 
         if materials_skipped > 0:
-            st.warning(f"{materials_skipped} материалов были пропущены из-за отсутствия данных.")
+            st.warning(f"{materials_skipped} временных рядов были пропущены из-за отсутствия данных.")
             
         excel_buffer.seek(0)
         return excel_buffer.getvalue()
