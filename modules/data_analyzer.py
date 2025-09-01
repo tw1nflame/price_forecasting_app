@@ -226,50 +226,15 @@ class DataAnalyzer:
         material_counts.columns = [self.ROLE_ID, "Количество записей"]
         material_counts = material_counts.sort_values("Количество записей", ascending=False).reset_index(drop=True)
         
-        # Поиск временного ряда по ID
-        search_material = st.text_input("Поиск временного ряда по ID:", key="material_search_uniqueness")
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"Поиск временного ряда: '{search_material}' (всего временных рядов: {material_counts.shape[0]})")
-        logger.info(f"Первые 5 ID: {material_counts[self.ROLE_ID].astype(str).head().tolist()}")
-
-        # Определяем данные для отображения
-        if search_material:
-            try:
-                logger.info(f"Выполняется фильтрация по: {search_material}")
-                filtered_materials = material_counts[
-                    material_counts[self.ROLE_ID].astype(str).str.contains(search_material, case=False, na=False, regex=False)
-                ]
-                logger.info(f"Результат фильтрации: найдено {len(filtered_materials)} временных рядов")
-                logger.info(f"Первые 5 найденных: {filtered_materials[self.ROLE_ID].astype(str).head().tolist()}")
-            except Exception as e:
-                st.error(f"Ошибка при поиске: {e}")
-                logger.error(f"Ошибка при поиске: {e}")
-                filtered_materials = pd.DataFrame(columns=material_counts.columns)
-
-            st.write(f"Найдено временных рядов: {len(filtered_materials)}")
-            data_to_show = filtered_materials
-        else:
-            st.write(f"Топ-20 временных рядов по количеству записей (всего временных рядов: "
-                     f"{material_counts.shape[0]:,}):".replace(",", " "))
-            data_to_show = material_counts.head(20)
-        
-        # Отображение таблицы
-        print("data_to_show shape:", data_to_show.shape)
-        print("data_to_show head:\n", data_to_show.head())
-        st.write("data_to_show shape:", data_to_show.shape)
-        st.write(data_to_show.head())
-        if not data_to_show.empty:
-            st.dataframe(
-                format_streamlit_dataframe(data_to_show),
-                use_container_width=True,
-                height=500
-            )
-            st.markdown(get_material_specific_explanation("table_material_counts", search_material))
-        elif search_material:
-            st.info("Временные ряды, соответствующие поисковому запросу, не найдены.")
-        else:
-            st.info("Нет данных для отображения.")
+        # Показываем топ-20 временных рядов по количеству записей
+        st.write(f"Топ-20 временных рядов по количеству записей (всего временных рядов: {material_counts.shape[0]:,}):".replace(",", " "))
+        st.dataframe(
+            format_streamlit_dataframe(material_counts.head(20)),
+            use_container_width=True,
+            height=500
+        )
+        # Пояснение для таблицы (без конкретного выбранного ряда)
+        st.markdown(get_material_specific_explanation("table_material_counts", None))
         
         # Гистограмма распределения количества записей
         st.subheader("Гистограмма распределения количества записей")

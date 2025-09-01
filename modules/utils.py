@@ -381,7 +381,27 @@ def get_download_link(df, filename, text):
     """
     output = BytesIO()
     writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    df.to_excel(writer, sheet_name='Данные', index=False)
+    # Попытка вернуть исходные имена колонок перед экспортом, если задан mapping
+    export_df = df.copy()
+    try:
+        import streamlit as st
+        if 'column_mapping' in st.session_state and st.session_state.get('column_mapping'):
+            mapping = st.session_state['column_mapping'] or {}
+            rename_map = {}
+            for canonical_role, original_col in mapping.items():
+                if not original_col:
+                    continue
+                if canonical_role in export_df.columns:
+                    rename_map[canonical_role] = original_col
+                canonical_norm = f"{canonical_role} (норм.)"
+                if canonical_norm in export_df.columns:
+                    rename_map[canonical_norm] = f"{original_col} (норм.)"
+            if rename_map:
+                export_df = export_df.rename(columns=rename_map)
+    except Exception:
+        pass
+
+    export_df.to_excel(writer, sheet_name='Данные', index=False)
     
     # Автоподбор ширины столбцов
     workbook = writer.book
@@ -724,7 +744,10 @@ def show_loading_spinner(message="Загрузка данных...", key=None):
     </style>
     """
     
-    placeholder = st.empty() if key is None else st.empty().key(key)
+    # Avoid assigning a key to the placeholder container itself. Creating
+    # widgets or containers with dynamic keys here can conflict with other
+    # widget keys and trigger unintended session_state updates / reruns.
+    placeholder = st.empty()
     placeholder.markdown(spinner_html, unsafe_allow_html=True)
     return placeholder
 

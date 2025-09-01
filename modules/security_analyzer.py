@@ -84,6 +84,34 @@ class SecurityAnalyzer:
             price_col = None
 
         return id_col, date_col, price_col
+
+    def _apply_reverse_column_mapping(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Попытка вернуть названия колонок к исходным, выбранным пользователем в `st.session_state['column_mapping']`.
+        Не меняет DataFrame, если mapping отсутствует или какие-то колонки не найдены.
+        """
+        try:
+            if 'column_mapping' in st.session_state and st.session_state.get('column_mapping'):
+                mapping = st.session_state['column_mapping'] or {}
+                rename_map = {}
+                for canonical_role, original_col in mapping.items():
+                    if not original_col:
+                        continue
+                    # если каноническое имя колонкой присутствует — переименуем
+                    if canonical_role in df.columns:
+                        rename_map[canonical_role] = original_col
+                    # normalized price column
+                    canonical_norm = f"{canonical_role} (норм.)"
+                    if canonical_norm in df.columns:
+                        rename_map[canonical_norm] = f"{original_col} (норм.)"
+
+                if rename_map:
+                    df = df.rename(columns=rename_map)
+        except Exception:
+            # в случае ошибки возвращаем исходный df
+            return df
+
+        return df
     
     def analyze_security_risks(self, data, segments):
         """
@@ -490,14 +518,18 @@ class SecurityAnalyzer:
 
         # 5. Экспорт данных
         if not filtered_risk_df.empty:
+            # Пытаемся вернуть исходные имена колонок перед экспортом
+            export_df = self._apply_reverse_column_mapping(filtered_risk_df.copy())
             buffer = io.BytesIO()
-            filtered_risk_df.to_csv(buffer, index=False, encoding='utf-8-sig')
+            export_df.to_csv(buffer, index=False, encoding='utf-8-sig')
             buffer.seek(0)
-            st.download_button(label="Скачать отчет о рисках (CSV)", data=buffer, file_name="security_risk_report.csv", mime="text/csv; charset=utf-8-sig")
+            st.download_button(label="Скачать отчет о рисках (CSV)", data=buffer, file_name="security_risk_report.csv", mime="text/csv; charset=utf-8-sig", key="security_csv_main")
 
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                filtered_risk_df.to_excel(writer, sheet_name='Отчет о рисках', index=False)
+                # Переименовываем колонки обратно для экспорта в Excel
+                export_df = self._apply_reverse_column_mapping(filtered_risk_df.copy())
+                export_df.to_excel(writer, sheet_name='Отчет о рисках', index=False)
                 workbook = writer.book
                 worksheet = writer.sheets['Отчет о рисках']
                 header_format = workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'bg_color': '#D7E4BC', 'border': 1})
@@ -507,22 +539,26 @@ class SecurityAnalyzer:
                     column_width = max(filtered_risk_df[col].astype(str).map(len).max(), len(col)) + 2
                     worksheet.set_column(i, i, column_width)
             excel_buffer.seek(0)
-            st.download_button(label="Скачать отчет о рисках (Excel)", data=excel_buffer, file_name="security_risk_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(label="Скачать отчет о рисков (Excel)", data=excel_buffer, file_name="security_risk_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="security_excel_main")
         if not filtered_risk_df.empty:
+            # повторный блок экспорта (UI duplication) — тоже применяем reverse mapping
+            export_df = self._apply_reverse_column_mapping(filtered_risk_df.copy())
             buffer = io.BytesIO()
-            filtered_risk_df.to_csv(buffer, index=False, encoding='utf-8-sig')
+            export_df.to_csv(buffer, index=False, encoding='utf-8-sig')
             buffer.seek(0)
             st.download_button(
                 label="Скачать отчет о рисках (CSV)",
                 data=buffer,
                 file_name="security_risk_report.csv",
-                mime="text/csv; charset=utf-8-sig"
+                mime="text/csv; charset=utf-8-sig",
+                key="security_csv_dup"
             )
             
             # Добавляем кнопку для скачивания Excel
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                filtered_risk_df.to_excel(writer, sheet_name='Отчет о рисках', index=False)
+                export_df = self._apply_reverse_column_mapping(filtered_risk_df.copy())
+                export_df.to_excel(writer, sheet_name='Отчет о рисках', index=False)
                 
                 # Базовое форматирование Excel
                 workbook = writer.book
@@ -551,10 +587,11 @@ class SecurityAnalyzer:
             
             excel_buffer.seek(0)
             st.download_button(
-                label="Скачать отчет о рисках (Excel)",
+                label="Скачать отчет о рисков (Excel)",
                 data=excel_buffer,
                 file_name="security_risk_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="security_excel_dup"
             )
     
     def highlight_suspicious_materials(self, data, material_code=None):
@@ -900,13 +937,15 @@ class SecurityAnalyzer:
                 ]
             })
 
-        info_df.to_excel(writer, sheet_name=sheet_name, index=False)
+        # Применяем обратный маппинг перед экспортом
+        info_df_to_export = self._apply_reverse_column_mapping(info_df.copy())
+        info_df_to_export.to_excel(writer, sheet_name=sheet_name, index=False)
         worksheet = writer.sheets[sheet_name]
-        
+
         # Apply header format
-        for col_num, value in enumerate(info_df.columns.values):
+        for col_num, value in enumerate(info_df_to_export.columns.values):
             worksheet.write(0, col_num, value, formats['header'])
-            
+
         # Adjust column widths
         worksheet.set_column(0, 0, 30) # Parameter column
         worksheet.set_column(1, 1, 25) # Value column
@@ -920,15 +959,16 @@ class SecurityAnalyzer:
         # Prepare data - select relevant columns if necessary
         purchase_df = material_data.copy()
 
-        purchase_df.to_excel(writer, sheet_name=sheet_name, index=False)
+        purchase_df_to_export = self._apply_reverse_column_mapping(purchase_df.copy())
+        purchase_df_to_export.to_excel(writer, sheet_name=sheet_name, index=False)
         worksheet = writer.sheets[sheet_name]
-        
+
         # Apply header format
-        for col_num, value in enumerate(purchase_df.columns.values):
+        for col_num, value in enumerate(purchase_df_to_export.columns.values):
             worksheet.write(0, col_num, value, formats['header'])
-        
+
         # Auto-adjust column widths
-        self._auto_adjust_excel_columns(purchase_df, worksheet)
+        self._auto_adjust_excel_columns(purchase_df_to_export, worksheet)
 
     def _write_anomaly_sheet(self, writer, material_code, material_data):
         """Записывает лист 'Анализ аномалий' в Excel."""
@@ -964,21 +1004,22 @@ class SecurityAnalyzer:
             'Верхняя граница (2σ)', 'Нижняя граница (2σ)', 'Аномалия'
         ]
 
-        anomalies_export_df.to_excel(writer, sheet_name=sheet_name, index=False)
+        anomalies_export_df_to_export = self._apply_reverse_column_mapping(anomalies_export_df.copy())
+        anomalies_export_df_to_export.to_excel(writer, sheet_name=sheet_name, index=False)
         worksheet = writer.sheets[sheet_name]
-        
+
         # Apply header format
-        for col_num, value in enumerate(anomalies_export_df.columns.values):
+        for col_num, value in enumerate(anomalies_export_df_to_export.columns.values):
             worksheet.write(0, col_num, value, formats['header'])
-        
+
         # Highlight anomalies
-        for row_num, is_anomaly in enumerate(anomalies_export_df['Аномалия']):
+        for row_num, is_anomaly in enumerate(anomalies_export_df_to_export['Аномалия']):
             if is_anomaly:
-                worksheet.conditional_format(row_num + 1, 0, row_num + 1, anomalies_export_df.shape[1] - 1, 
+                worksheet.conditional_format(row_num + 1, 0, row_num + 1, anomalies_export_df_to_export.shape[1] - 1, 
                                            {'type': 'no_errors', 'format': formats['anomaly_highlight']})
-                                           
+
         # Auto-adjust column widths
-        self._auto_adjust_excel_columns(anomalies_export_df, worksheet)
+        self._auto_adjust_excel_columns(anomalies_export_df_to_export, worksheet)
 
     def _write_periodicity_sheet(self, writer, material_code, material_data):
         """Записывает лист 'Периодичность' в Excel."""
@@ -1000,19 +1041,20 @@ class SecurityAnalyzer:
         periods_data = material_data_copy[[date_col, 'days_diff']].dropna()
         periods_data.columns = ['Дата', 'Интервал (дни)']
 
-        periods_data.to_excel(writer, sheet_name=sheet_name, index=False)
+        periods_data_to_export = self._apply_reverse_column_mapping(periods_data.copy())
+        periods_data_to_export.to_excel(writer, sheet_name=sheet_name, index=False)
         worksheet = writer.sheets[sheet_name]
-        
+
         # Apply header format
-        for col_num, value in enumerate(periods_data.columns.values):
+        for col_num, value in enumerate(periods_data_to_export.columns.values):
             worksheet.write(0, col_num, value, formats['header'])
-            
+
         # Highlight short intervals
         threshold = self.risk_thresholds.get('purchase_frequency', 3) # Use default if not found
-        for row_num, interval in enumerate(periods_data['Интервал (дни)']):
+        for row_num, interval in enumerate(periods_data_to_export['Интервал (дни)']):
             if interval <= threshold:
                 worksheet.write(row_num + 1, 1, interval, formats['orange_highlight'])
-                
+
         # Auto-adjust column widths
         worksheet.set_column(0, 0, 20) # Date
         worksheet.set_column(1, 1, 15) # Interval
@@ -1054,16 +1096,17 @@ class SecurityAnalyzer:
                 ]
             })
 
-        risk_data.to_excel(writer, sheet_name=sheet_name, index=False)
+        risk_data_to_export = self._apply_reverse_column_mapping(risk_data.copy())
+        risk_data_to_export.to_excel(writer, sheet_name=sheet_name, index=False)
         worksheet = writer.sheets[sheet_name]
-        
+
         # Apply header format
-        for col_num, value in enumerate(risk_data.columns.values):
+        for col_num, value in enumerate(risk_data_to_export.columns.values):
             worksheet.write(0, col_num, value, formats['header'])
-            
+
         # Highlight risk category if calculated
         if len(material_data) >= 2:
-            risk_category_row_index = risk_data[risk_data['Показатель'] == 'Категория риска'].index[0]
+            risk_category_row_index = risk_data_to_export[risk_data_to_export['Показатель'] == 'Категория риска'].index[0]
             risk_color_format = None
             if risk_category == "Высокий":
                 risk_color_format = formats['red_highlight']
@@ -1072,7 +1115,7 @@ class SecurityAnalyzer:
             else:
                 risk_color_format = formats['green_highlight']
             worksheet.write(risk_category_row_index + 1, 1, risk_category, risk_color_format)
-            
+
         # Auto-adjust column widths
         worksheet.set_column(0, 0, 35) # Indicator column
         worksheet.set_column(1, 1, 60) # Value column (risk factors can be long)

@@ -30,10 +30,8 @@ class DataLoader:
         """
         st.header("Загрузка данных")
         
-        st.markdown(f"""
+        st.markdown("""
         Загрузите CSV-файл с данными о материалах или используйте демонстрационный набор данных.
-        - **Обязательные колонки:** `{', '.join(self.mandatory_columns)}`
-        - **Рекомендуемые колонки (для полного анализа):** `{', '.join(self.recommended_columns)}`
         """)
         
         # Разделяем на две колонки для лучшего размещения
@@ -152,20 +150,22 @@ class DataLoader:
     def _finalize_data_load(self, data):
         """Общая логика после загрузки данных (из файла или демо)"""
         if data is not None:
-            # Проверка на наличие обязательных колонок
+            # Проверка на наличие обязательных колонок — теперь не блокирует загрузку.
             missing_mandatory = [col for col in self.mandatory_columns if col not in data.columns]
             if missing_mandatory:
-                st.error(f"Ошибка: Отсутствуют обязательные колонки: {', '.join(missing_mandatory)}. Загрузка отменена.")
-                if 'data' in st.session_state: del st.session_state.data
-                return # Прерываем выполнение
+                st.warning(
+                    f"Внимание: В загруженном файле не найдены обязательные колонки: {', '.join(missing_mandatory)}. "
+                    "Данные загружены — выполните маппинг колонок в разделе 'Маппинг колонок'."
+                )
 
             # Проверка на наличие рекомендуемых колонок
             missing_recommended = [col for col in self.recommended_columns if col not in data.columns]
             if missing_recommended:
                 st.warning(f"Внимание: Отсутствуют рекомендуемые колонки: {', '.join(missing_recommended)}. Некоторые функции анализа могут быть недоступны.")
 
-            # Сохраняем данные в session_state
+            # Сохраняем данные и оригинальные имена колонок в session_state
             st.session_state.data = data
+            st.session_state.original_columns = list(data.columns)
             
             # Очищаем другие сессионные данные
             keys_to_clear = ['processed_data', 'materials_segments', 'segments_stats', 'stability_data', 'volatility_data', 'security_risks'] # Добавлены все возможные ключи
@@ -352,18 +352,10 @@ class DataLoader:
                     if enc != encoding and encoding != "auto":
                         st.info(f"Для загрузки данных используется кодировка {enc} вместо {encoding}")
                     
-                    # Проверяем, что колонки соответствуют ожидаемым
-                    expected_columns = [
-                        # Используем объединение обязательных и рекомендуемых
-                        *self.mandatory_columns,
-                        *self.recommended_columns
-                    ]
-                    
-                    # Если количество столбцов совпадает, но названия разные, 
-                    # переименовываем их
-                    if len(data.columns) == len(expected_columns) and not all(col in data.columns for col in expected_columns):
-                        data.columns = expected_columns
-                    
+                    # Ранее код автоматически переименовывал колонки в ожидаемые
+                    # имена при совпадении количества столбцов. Это приводило к
+                    # потере оригинальных заголовков файла и мешало ручному маппингу.
+                    # Теперь возвращаем DataFrame с оригинальными заголовками.
                     return data
                 
                 except Exception as e:

@@ -152,7 +152,7 @@ elif page == "Загрузка данных":
 
     # Показываем форму для маппинга колонок только если данные загружены
     if 'data' in st.session_state:
-        st.header("Картирование колонок (mapping)")
+        st.header("Маппинг колонок")
 
         cols = list(st.session_state.data.columns)
 
@@ -171,7 +171,7 @@ elif page == "Загрузка данных":
         currency_choice = st.selectbox("5. Валюта", ["(не выбрано)"] + cols, key='map_currency')
         rate_choice = st.selectbox("6. Курс", ["(не выбрано)"] + cols, key='map_rate')
 
-        # Собираем маппинг и сохраняем в session_state
+        # Собираем маппинг (не сохраняем автоматически)
         mapping = {
             'ID': None if id_choice == "(не выбрано)" else id_choice,
             'Дата': None if date_choice == "(не выбрано)" else date_choice,
@@ -181,20 +181,27 @@ elif page == "Загрузка данных":
             'Курс': None if rate_choice == "(не выбрано)" else rate_choice,
         }
 
-        st.session_state.column_mapping = mapping
+        # Показываем текущий сохранённый mapping (если есть)
+        current_mapping = st.session_state.get('column_mapping', {})
+        if current_mapping:
+            st.caption(f"Текущий сохранённый mapping: {current_mapping}")
 
         # Кнопка обработки данных должна быть активна только если выбраны ID, Date и Target
         required_ok = mapping['ID'] is not None and mapping['Дата'] is not None and mapping['Целевая Колонка'] is not None
 
+        # Сохраняем mapping автоматически при выборе (пользователь просил автоматическое сохранение)
+        st.session_state.column_mapping = mapping
+
         if not required_ok:
             st.info("Для активации кнопки 'Обработать данные' выберите: 1) Идентификационную колонку, 2) Дату, 3) Целевую колонку.")
 
-        # Кнопка с контролем disabled
-        if st.button("Обработать данные", disabled=not required_ok):
+        # Кнопка с контролем disabled для обработки данных: доступна только когда выбраны три обязательные колонки
+        process_enabled = required_ok
+        if st.button("Обработать данные", disabled=not process_enabled):
             with st.spinner("Обработка данных..."):
-                mapping = st.session_state.get('column_mapping', None)
+                mapping_to_use = st.session_state.get('column_mapping', None)
                 # Передаем mapping, он может содержать None для невыбранных ролей
-                st.session_state.processed_data = data_processor.process_data(st.session_state.data, column_mapping=mapping)
+                st.session_state.processed_data = data_processor.process_data(st.session_state.data, column_mapping=mapping_to_use)
                 st.success("Данные успешно обработаны!")
                 # Показать образец обработанных данных
                 st.subheader("Образец обработанных данных")

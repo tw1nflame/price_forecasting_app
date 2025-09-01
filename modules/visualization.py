@@ -865,8 +865,27 @@ class Visualizer:
 
                 # Добавляем возможность экспорта всех данных
                 # Используем BytesIO и кодировку utf-8-sig для корректного отображения в Excel
+                # Попытка вернуть исходные имена колонок перед экспортом
+                export_df = display_data.copy()
+                try:
+                    if 'column_mapping' in st.session_state and st.session_state.get('column_mapping'):
+                        mapping = st.session_state['column_mapping'] or {}
+                        rename_map = {}
+                        for canonical_role, original_col in mapping.items():
+                            if not original_col:
+                                continue
+                            if canonical_role in export_df.columns:
+                                rename_map[canonical_role] = original_col
+                            canonical_norm = f"{canonical_role} (норм.)"
+                            if canonical_norm in export_df.columns:
+                                rename_map[canonical_norm] = f"{original_col} (норм.)"
+                        if rename_map:
+                            export_df = export_df.rename(columns=rename_map)
+                except Exception:
+                    pass
+
                 csv_buffer = io.BytesIO()
-                display_data.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+                export_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
                 csv_data = csv_buffer.getvalue()
                 st.download_button(
                     label=f"Скачать все {row_count:,} строк в CSV".replace(",", " "),
